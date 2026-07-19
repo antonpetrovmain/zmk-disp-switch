@@ -34,6 +34,11 @@ static struct zmk_widget_peripheral_status peripheral_status_widget;
 static struct zmk_widget_layer_status layer_status_widget;
 #endif
 
+/* ---- Claude usage label (strong impl in claude_usage.c when the
+ * claude-uart snippet is applied; NULL stub otherwise) ---------------------- */
+
+__attribute__((weak)) lv_obj_t *zmk_claude_usage_create(lv_obj_t *parent) { return NULL; }
+
 /* ---- battery ETA label ---------------------------------------------------- */
 
 static lv_obj_t *eta_label;
@@ -91,6 +96,12 @@ lv_obj_t *zmk_display_status_screen() {
                                lv_theme_get_font_small(screen), LV_PART_MAIN);
     lv_obj_align(zmk_widget_layer_status_obj(&layer_status_widget), LV_ALIGN_BOTTOM_LEFT, 0, 0);
 #endif
+
+    lv_obj_t *cu = zmk_claude_usage_create(screen);
+    if (cu != NULL) {
+        lv_obj_set_style_text_font(cu, lv_theme_get_font_small(screen), LV_PART_MAIN);
+        lv_obj_align(cu, LV_ALIGN_TOP_MID, 0, 0);
+    }
 
     eta_label = lv_label_create(screen);
     lv_obj_set_style_text_font(eta_label, lv_theme_get_font_small(screen), LV_PART_MAIN);

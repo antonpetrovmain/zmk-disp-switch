@@ -1,0 +1,14 @@
+/* USB CDC-ACM serial for the Claude-usage OLED widget (central half only —
+ * apply this snippet to corne_left in build.yaml). The Mac-side daemon writes
+ * "CU:<0-100>\n" lines to /dev/tty.usbmodem*. */
+&zephyr_udc0 {
+    cdc_acm_uart: cdc_acm_uart {
+        compatible = "zephyr,cdc-acm-uart";
+    };
+};
+
+/ {
+    chosen {
+        zmk,claude-uart = &cdc_acm_uart;
+    };
+};

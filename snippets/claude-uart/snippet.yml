@@ -1,0 +1,4 @@
+name: claude-uart
+append:
+  EXTRA_DTC_OVERLAY_FILE: claude-uart.overlay
+  EXTRA_CONF_FILE: claude-uart.conf
