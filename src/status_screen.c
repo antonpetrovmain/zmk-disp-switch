@@ -158,6 +158,11 @@ void disp_sw_layout_refresh(bool usb) {
             lv_obj_clear_flag(eta_label, LV_OBJ_FLAG_HIDDEN);
         }
     }
+    if (eta_label != NULL && !usb) {
+        /* battery mode: ETA lives right-aligned under the battery cluster —
+         * grouped with its family, a full row away from the Claude reset time */
+        lv_obj_align(eta_label, LV_ALIGN_TOP_RIGHT, 0, 16);
+    }
     batt_usb = usb;
     render_batt();
 }
@@ -231,8 +236,12 @@ lv_obj_t *zmk_display_status_screen() {
     if (cu_label_ref != NULL) {
         lv_obj_set_style_text_font(cu_label_ref, &lv_font_unscii_8, LV_PART_MAIN);
         lv_obj_set_style_text_align(cu_label_ref, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-        /* own line: the free 8 px band between the icon row and bottom row */
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) || !IS_ENABLED(CONFIG_ZMK_SPLIT)
+        /* the position Tony likes on USB — now permanent in every mode */
+        lv_obj_align(cu_label_ref, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+#else
         lv_obj_align(cu_label_ref, LV_ALIGN_TOP_MID, 0, 16);
+#endif
     }
 
     batt_pct_label = lv_label_create(screen);
