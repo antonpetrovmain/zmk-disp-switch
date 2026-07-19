@@ -17,10 +17,6 @@
 #include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
 
-#if IS_ENABLED(CONFIG_ZMK_WIDGET_PERIPHERAL_STATUS)
-#include <zmk/display/widgets/peripheral_status.h>
-static struct zmk_widget_peripheral_status peripheral_status_widget;
-#endif
 #if IS_ENABLED(CONFIG_ZMK_WIDGET_LAYER_STATUS)
 #include <zmk/display/widgets/layer_status.h>
 static struct zmk_widget_layer_status layer_status_widget;
@@ -85,7 +81,37 @@ ZMK_SUBSCRIPTION(widget_out_compact, zmk_ble_active_profile_changed);
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 ZMK_SUBSCRIPTION(widget_out_compact, zmk_usb_conn_state_changed);
 #endif
-#endif /* central */
+#else /* peripheral: compact split-link indicator mirroring the central style —
+       * BT glyph + 2 px underline when connected (replaces stock [wifi][✓]) */
+#include <zmk/split/bluetooth/peripheral.h>
+#include <zmk/events/split_peripheral_status_changed.h>
+
+static lv_obj_t *p_icon_label;
+static lv_obj_t *p_underline;
+
+struct perif_state {
+    bool connected;
+};
+
+static struct perif_state perif_get_state(const zmk_event_t *eh) {
+    return (struct perif_state){.connected = zmk_split_bt_peripheral_is_connected()};
+}
+
+static void perif_update_cb(struct perif_state st) {
+    if (p_underline == NULL) {
+        return;
+    }
+    if (st.connected) {
+        lv_obj_clear_flag(p_underline, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(p_underline, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+ZMK_DISPLAY_WIDGET_LISTENER(widget_perif_compact, struct perif_state, perif_update_cb,
+                            perif_get_state)
+ZMK_SUBSCRIPTION(widget_perif_compact, zmk_split_peripheral_status_changed);
+#endif /* central/peripheral */
 
 /* ---- Claude usage label (usage_display.c) --------------------------------- */
 
@@ -221,10 +247,20 @@ lv_obj_t *zmk_display_status_screen() {
     lv_obj_align(out_underline, LV_ALIGN_TOP_LEFT, 14, 13);
     widget_out_compact_init();
 #endif
-#if IS_ENABLED(CONFIG_ZMK_WIDGET_PERIPHERAL_STATUS)
-    zmk_widget_peripheral_status_init(&peripheral_status_widget, screen);
-    lv_obj_align(zmk_widget_peripheral_status_obj(&peripheral_status_widget), LV_ALIGN_TOP_LEFT, 0,
-                 0);
+#if IS_ENABLED(CONFIG_ZMK_SPLIT) && !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+    p_icon_label = lv_label_create(screen);
+    lv_label_set_text(p_icon_label, LV_SYMBOL_BLUETOOTH);
+    lv_obj_align(p_icon_label, LV_ALIGN_TOP_LEFT, 0, 0);
+    p_underline = lv_obj_create(screen);
+    lv_obj_set_size(p_underline, 8, 2);
+    lv_obj_set_style_bg_color(p_underline, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(p_underline, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(p_underline, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(p_underline, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(p_underline, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(p_underline, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_align(p_underline, LV_ALIGN_TOP_LEFT, 2, 13);
+    widget_perif_compact_init();
 #endif
 #if IS_ENABLED(CONFIG_ZMK_WIDGET_LAYER_STATUS)
     zmk_widget_layer_status_init(&layer_status_widget, screen);
@@ -255,12 +291,13 @@ lv_obj_t *zmk_display_status_screen() {
 
     batt_pct_label = lv_label_create(screen);
     lv_obj_set_style_text_font(batt_pct_label, &lv_font_unscii_8, LV_PART_MAIN);
-    lv_obj_align(batt_pct_label, LV_ALIGN_TOP_RIGHT, -18, 4);
+    lv_obj_align(batt_pct_label, LV_ALIGN_TOP_RIGHT, -26, 4);
     widget_batt_pct_init();
 
     eta_label = lv_label_create(screen);
     lv_obj_set_style_text_font(eta_label, &lv_font_unscii_8, LV_PART_MAIN);
-    lv_obj_align(eta_label, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+    /* battery-mode home from birth — layout_refresh keeps it here */
+    lv_obj_align(eta_label, LV_ALIGN_TOP_RIGHT, 0, 16);
     widget_eta_init();
 
     return screen;
