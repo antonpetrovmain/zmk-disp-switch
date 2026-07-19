@@ -138,9 +138,9 @@ static void render_batt(void) {
         /* one line, right-anchored, grows leftward: "~2d15h 86" on battery,
          * just "86" while charging (ETA meaningless then) */
         if (!batt_usb && eta_text[0] != '\0') {
-            lv_label_set_text_fmt(batt_pct_label, "%s %u", eta_text, batt_soc);
+            lv_label_set_text_fmt(batt_pct_label, "%s %02u", eta_text, batt_soc);
         } else {
-            lv_label_set_text_fmt(batt_pct_label, "%u", batt_soc);
+            lv_label_set_text_fmt(batt_pct_label, "%02u", batt_soc);
         }
     }
     const char *sym;

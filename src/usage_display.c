@@ -31,9 +31,9 @@ static void update_cb(struct k_work *work) {
     int hh = (int)atomic_get(&v_hh);
     int mm = (int)atomic_get(&v_mm);
     if (five >= 0 && hh >= 0) {
-        snprintf(text, sizeof(text), "C%d %02d:%02d", five, hh, mm);
+        snprintf(text, sizeof(text), "C%02d %02d:%02d", five, hh, mm);
     } else if (five >= 0) {
-        snprintf(text, sizeof(text), "C%d", five);
+        snprintf(text, sizeof(text), "C%02d", five);
     } else if (atomic_get(&v_o) >= 0 || atomic_get(&v_s) >= 0 || atomic_get(&v_f) >= 0) {
         /* costs-only keyboard: no limits feed -> no C-- placeholder */
         text[0] = '\0';
@@ -54,11 +54,11 @@ static void update_cb(struct k_work *work) {
     int week = (int)atomic_get(&v_week);
     int f = (int)atomic_get(&v_f);
     if (week >= 0 && f >= 0) {
-        snprintf(text, sizeof(text), "W%d F%d", week, f);
+        snprintf(text, sizeof(text), "W%02d F%d", week, f);
     } else if (f >= 0) {
         snprintf(text, sizeof(text), "F%d", f);
     } else if (week >= 0) {
-        snprintf(text, sizeof(text), "W%d", week);
+        snprintf(text, sizeof(text), "W%02d", week);
     } else if (f >= 0) {
         snprintf(text, sizeof(text), "F%d", f);
     } else {
