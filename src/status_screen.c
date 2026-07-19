@@ -113,20 +113,21 @@ lv_obj_t *zmk_display_status_screen() {
 #endif
 #if IS_ENABLED(CONFIG_ZMK_WIDGET_LAYER_STATUS)
     zmk_widget_layer_status_init(&layer_status_widget, screen);
+    /* unscii is a true pixel font — crisp on a 1-bit OLED, no dithered '%' */
     lv_obj_set_style_text_font(zmk_widget_layer_status_obj(&layer_status_widget),
-                               lv_theme_get_font_small(screen), LV_PART_MAIN);
+                               &lv_font_unscii_8, LV_PART_MAIN);
     lv_obj_align(zmk_widget_layer_status_obj(&layer_status_widget), LV_ALIGN_BOTTOM_LEFT, 0, 0);
 #endif
 
     cu_label_ref = zmk_claude_usage_create(screen);
     if (cu_label_ref != NULL) {
-        lv_obj_set_style_text_font(cu_label_ref, lv_theme_get_font_small(screen), LV_PART_MAIN);
+        lv_obj_set_style_text_font(cu_label_ref, &lv_font_unscii_8, LV_PART_MAIN);
         lv_obj_align(cu_label_ref, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
         lv_obj_add_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN); /* battery boot default */
     }
 
     eta_label = lv_label_create(screen);
-    lv_obj_set_style_text_font(eta_label, lv_theme_get_font_small(screen), LV_PART_MAIN);
+    lv_obj_set_style_text_font(eta_label, &lv_font_unscii_8, LV_PART_MAIN);
     lv_obj_align(eta_label, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
     widget_eta_init();
 
