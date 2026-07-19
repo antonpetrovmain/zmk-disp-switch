@@ -21,14 +21,19 @@ static const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(zmk_claude_uart));
 
 static lv_obj_t *cu_label;
 static atomic_t cu_pct = ATOMIC_INIT(-1);
+static atomic_t cw_pct = ATOMIC_INIT(-1); /* 7-day window */
 
 static void cu_update_cb(struct k_work *work) {
     if (cu_label == NULL) {
         return;
     }
     int pct = (int)atomic_get(&cu_pct);
-    char text[10];
-    if (pct >= 0 && pct <= 100) {
+    int wk = (int)atomic_get(&cw_pct);
+    char text[16];
+    if (pct >= 0 && pct <= 100 && wk >= 0 && wk <= 100) {
+        /* C = current 5h window, W = 7-day week */
+        snprintf(text, sizeof(text), "C%d%% W%d%%", pct, wk);
+    } else if (pct >= 0 && pct <= 100) {
         snprintf(text, sizeof(text), "C%d%%", pct);
     } else {
         snprintf(text, sizeof(text), "C--");
@@ -43,10 +48,11 @@ static size_t line_len;
 
 static void handle_line(void) {
     line[line_len] = '\0';
-    if (line_len >= 4 && line[0] == 'C' && line[1] == 'U' && line[2] == ':') {
+    if (line_len >= 4 && line[0] == 'C' && line[2] == ':' &&
+        (line[1] == 'U' || line[1] == 'W')) {
         int pct = atoi(&line[3]);
         if (pct >= 0 && pct <= 100) {
-            atomic_set(&cu_pct, pct);
+            atomic_set(line[1] == 'U' ? &cu_pct : &cw_pct, pct);
             k_work_submit_to_queue(zmk_display_work_q(), &cu_update_work);
         }
     }
