@@ -4,3 +4,31 @@ config ZMK_BEHAVIOR_DISP_SWITCH
     bool
     default $(dt_compat_enabled,$(DT_COMPAT_ZMK_BEHAVIOR_DISP_SWITCH))
     depends on ZMK_DISPLAY
+
+if ZMK_BEHAVIOR_DISP_SWITCH
+
+config ZMK_DISP_SW_PEEK_MS
+    int "Peek duration in ms (&disp_sw 3)"
+    default 5000
+
+config ZMK_DISP_SW_BATT_MAH
+    int "Battery capacity per half in mAh (for the ETA widget)"
+    default 110
+
+config ZMK_DISP_SW_DRAIN_UA
+    int "Assumed average drain in uA with screens dark (for the ETA widget)"
+    default 1500
+
+# Custom status screen (stock widgets + battery-ETA label). The `imply`s turn
+# the stock widgets on only where their role dependencies are met (layer/output
+# = central only, peripheral-status = peripheral only) — no Kconfig warnings.
+config ZMK_DISP_SW_STATUS_SCREEN
+    bool
+    default y if ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
+    imply ZMK_WIDGET_BATTERY_STATUS
+    imply ZMK_WIDGET_BATTERY_STATUS_SHOW_PERCENTAGE
+    imply ZMK_WIDGET_OUTPUT_STATUS
+    imply ZMK_WIDGET_LAYER_STATUS
+    imply ZMK_WIDGET_PERIPHERAL_STATUS
+
+endif
