@@ -44,9 +44,11 @@ __attribute__((weak)) lv_obj_t *zmk_claude_usage_create(lv_obj_t *parent) { retu
 static lv_obj_t *eta_label;
 static lv_obj_t *cu_label_ref;
 
-/* Adaptive layout, called by behavior_disp_switch on the display work queue:
- * the bottom-right slot is ETA on battery (charging ETA is meaningless) and
- * the Claude-usage % on USB (which only has data when cabled anyway). */
+/* Adaptive layout, called by behavior_disp_switch on the display work queue.
+ * USB: ETA hidden (meaningless while charging), usage takes bottom-right.
+ * Battery: ETA bottom-right, usage moves TOP-CENTER — that space is only
+ * crowded on USB (charging bolt); on battery it is free, and BLE now delivers
+ * usage data without the cable, so it must stay visible here too. */
 void disp_sw_layout_refresh(bool usb) {
     if (eta_label != NULL) {
         if (usb) {
@@ -56,11 +58,8 @@ void disp_sw_layout_refresh(bool usb) {
         }
     }
     if (cu_label_ref != NULL) {
-        if (usb) {
-            lv_obj_clear_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN);
-        }
+        lv_obj_align(cu_label_ref, usb ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_TOP_MID, 0, 0);
+        lv_obj_clear_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
