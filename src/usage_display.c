@@ -27,7 +27,7 @@ static void update_cb(struct k_work *work) {
     int hh = (int)atomic_get(&v_hh);
     int mm = (int)atomic_get(&v_mm);
     if (five >= 0 && hh >= 0) {
-        snprintf(text, sizeof(text), "C%d\n%02d:%02d", five, hh, mm);
+        snprintf(text, sizeof(text), "C%d %02d:%02d", five, hh, mm);
     } else if (five >= 0) {
         snprintf(text, sizeof(text), "C%d", five);
     } else {

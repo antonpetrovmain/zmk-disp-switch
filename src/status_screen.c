@@ -17,10 +17,6 @@
 #include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
 
-#if IS_ENABLED(CONFIG_ZMK_WIDGET_BATTERY_STATUS)
-#include <zmk/display/widgets/battery_status.h>
-static struct zmk_widget_battery_status battery_status_widget;
-#endif
 #if IS_ENABLED(CONFIG_ZMK_WIDGET_OUTPUT_STATUS)
 #include <zmk/display/widgets/output_status.h>
 static struct zmk_widget_output_status output_status_widget;
@@ -43,6 +39,36 @@ lv_obj_t *zmk_usage_display_create(lv_obj_t *parent);
 static lv_obj_t *eta_label;
 static lv_obj_t *cu_label_ref;
 static lv_obj_t *batt_pct_label;
+static lv_obj_t *batt_icon_label;
+static uint8_t batt_soc;
+static bool batt_usb;
+
+/* Own battery cluster: ONE glyph that swaps to the charge bolt while
+ * powered (the stock widget APPENDS the bolt as a second glyph, which
+ * overlapped the percentage), plus a fixed-offset pixel-font percentage. */
+static void render_batt(void) {
+    if (batt_icon_label == NULL) {
+        return;
+    }
+    const char *sym;
+    if (batt_usb) {
+        sym = LV_SYMBOL_CHARGE;
+    } else if (batt_soc > 87) {
+        sym = LV_SYMBOL_BATTERY_FULL;
+    } else if (batt_soc > 62) {
+        sym = LV_SYMBOL_BATTERY_3;
+    } else if (batt_soc > 37) {
+        sym = LV_SYMBOL_BATTERY_2;
+    } else if (batt_soc > 12) {
+        sym = LV_SYMBOL_BATTERY_1;
+    } else {
+        sym = LV_SYMBOL_BATTERY_EMPTY;
+    }
+    lv_label_set_text(batt_icon_label, sym);
+    if (batt_pct_label != NULL) {
+        lv_label_set_text_fmt(batt_pct_label, "%u", batt_soc);
+    }
+}
 
 /* ---- compact battery % (unscii, next to the stock icon-only widget) ------- */
 
@@ -55,10 +81,8 @@ static struct batt_state batt_get_state(const zmk_event_t *eh) {
 }
 
 static void batt_update_cb(struct batt_state state) {
-    if (batt_pct_label == NULL) {
-        return;
-    }
-    lv_label_set_text_fmt(batt_pct_label, "%u", state.soc);
+    batt_soc = state.soc;
+    render_batt();
 }
 
 ZMK_DISPLAY_WIDGET_LISTENER(widget_batt_pct, struct batt_state, batt_update_cb, batt_get_state)
@@ -77,20 +101,8 @@ void disp_sw_layout_refresh(bool usb) {
             lv_obj_clear_flag(eta_label, LV_OBJ_FLAG_HIDDEN);
         }
     }
-    if (cu_label_ref != NULL) {
-#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) || !IS_ENABLED(CONFIG_ZMK_SPLIT)
-        /* stacked C + reset time: top-mid on battery, bottom-right on USB */
-        lv_obj_align(cu_label_ref, usb ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_TOP_MID, 0, 0);
-#else
-        /* peripheral: W%% always top-mid (link icon left, battery right) */
-        lv_obj_align(cu_label_ref, LV_ALIGN_TOP_MID, 0, 0);
-#endif
-        lv_obj_clear_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN);
-    }
-    if (batt_pct_label != NULL) {
-        /* leave room for the charging bolt glyph next to the icon on USB */
-        lv_obj_align(batt_pct_label, LV_ALIGN_TOP_RIGHT, usb ? -36 : -20, 4);
-    }
+    batt_usb = usb;
+    render_batt();
 }
 
 struct eta_state {
@@ -127,10 +139,8 @@ ZMK_SUBSCRIPTION(widget_eta, zmk_battery_state_changed);
 lv_obj_t *zmk_display_status_screen() {
     lv_obj_t *screen = lv_obj_create(NULL);
 
-#if IS_ENABLED(CONFIG_ZMK_WIDGET_BATTERY_STATUS)
-    zmk_widget_battery_status_init(&battery_status_widget, screen);
-    lv_obj_align(zmk_widget_battery_status_obj(&battery_status_widget), LV_ALIGN_TOP_RIGHT, 0, 0);
-#endif
+    batt_icon_label = lv_label_create(screen);
+    lv_obj_align(batt_icon_label, LV_ALIGN_TOP_RIGHT, 0, 0);
 #if IS_ENABLED(CONFIG_ZMK_WIDGET_OUTPUT_STATUS)
     zmk_widget_output_status_init(&output_status_widget, screen);
     lv_obj_align(zmk_widget_output_status_obj(&output_status_widget), LV_ALIGN_TOP_LEFT, 0, 0);
@@ -151,13 +161,13 @@ lv_obj_t *zmk_display_status_screen() {
     if (cu_label_ref != NULL) {
         lv_obj_set_style_text_font(cu_label_ref, &lv_font_unscii_8, LV_PART_MAIN);
         lv_obj_set_style_text_align(cu_label_ref, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-        lv_obj_align(cu_label_ref, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
-        lv_obj_add_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN); /* battery boot default */
+        /* own line: the free 8 px band between the icon row and bottom row */
+        lv_obj_align(cu_label_ref, LV_ALIGN_TOP_MID, 0, 16);
     }
 
     batt_pct_label = lv_label_create(screen);
     lv_obj_set_style_text_font(batt_pct_label, &lv_font_unscii_8, LV_PART_MAIN);
-    lv_obj_align(batt_pct_label, LV_ALIGN_TOP_RIGHT, -20, 4);
+    lv_obj_align(batt_pct_label, LV_ALIGN_TOP_RIGHT, -18, 4);
     widget_batt_pct_init();
 
     eta_label = lv_label_create(screen);
