@@ -61,12 +61,16 @@ static bool usb_powered(void) {
 static void apply_blank_cb(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(apply_blank_work, apply_blank_cb);
 
+/* strong impl in status_screen.c; no-op when the custom screen is unused */
+__attribute__((weak)) void disp_sw_layout_refresh(bool usb) { ARG_UNUSED(usb); }
+
 static void apply_blank_cb(struct k_work *work) {
     if (!zmk_display_is_initialized()) {
         /* boot race: display comes up async; retry until it is ready */
         k_work_reschedule_for_queue(zmk_display_work_q(), &apply_blank_work, K_MSEC(1000));
         return;
     }
+    disp_sw_layout_refresh(usb_powered());
     if (usb_powered() || !user_off || peek_active) {
         display_blanking_off(display);
     } else {

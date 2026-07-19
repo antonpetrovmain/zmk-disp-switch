@@ -42,6 +42,27 @@ __attribute__((weak)) lv_obj_t *zmk_claude_usage_create(lv_obj_t *parent) { retu
 /* ---- battery ETA label ---------------------------------------------------- */
 
 static lv_obj_t *eta_label;
+static lv_obj_t *cu_label_ref;
+
+/* Adaptive layout, called by behavior_disp_switch on the display work queue:
+ * the bottom-right slot is ETA on battery (charging ETA is meaningless) and
+ * the Claude-usage % on USB (which only has data when cabled anyway). */
+void disp_sw_layout_refresh(bool usb) {
+    if (eta_label != NULL) {
+        if (usb) {
+            lv_obj_add_flag(eta_label, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(eta_label, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (cu_label_ref != NULL) {
+        if (usb) {
+            lv_obj_clear_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
 
 struct eta_state {
     uint8_t soc;
@@ -97,10 +118,11 @@ lv_obj_t *zmk_display_status_screen() {
     lv_obj_align(zmk_widget_layer_status_obj(&layer_status_widget), LV_ALIGN_BOTTOM_LEFT, 0, 0);
 #endif
 
-    lv_obj_t *cu = zmk_claude_usage_create(screen);
-    if (cu != NULL) {
-        lv_obj_set_style_text_font(cu, lv_theme_get_font_small(screen), LV_PART_MAIN);
-        lv_obj_align(cu, LV_ALIGN_TOP_MID, 0, 0);
+    cu_label_ref = zmk_claude_usage_create(screen);
+    if (cu_label_ref != NULL) {
+        lv_obj_set_style_text_font(cu_label_ref, lv_theme_get_font_small(screen), LV_PART_MAIN);
+        lv_obj_align(cu_label_ref, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+        lv_obj_add_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN); /* battery boot default */
     }
 
     eta_label = lv_label_create(screen);
