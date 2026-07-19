@@ -35,6 +35,8 @@
 #if IS_ENABLED(CONFIG_ZMK_USB)
 #include <zmk/usb.h>
 #include <zmk/events/usb_conn_state_changed.h>
+#elif defined(CONFIG_SOC_SERIES_NRF52X)
+#include <hal/nrf_power.h>
 #endif
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -53,6 +55,11 @@ static bool peek_active;
 static bool usb_powered(void) {
 #if IS_ENABLED(CONFIG_ZMK_USB)
     return zmk_usb_is_powered();
+#elif defined(CONFIG_SOC_SERIES_NRF52X)
+    /* Peripheral halves can't enable ZMK_USB (central-only Kconfig), so read
+     * VBUS presence straight from the nRF POWER peripheral — the charging
+     * half still gets bolt icon + USB-mode layout. */
+    return nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
 #else
     return false;
 #endif
@@ -97,6 +104,24 @@ static void slow_tick_cb(struct k_work *work) {
     lv_task_handler();
     k_work_reschedule_for_queue(zmk_display_work_q(), &slow_tick_work, K_SECONDS(1));
 }
+
+#if !IS_ENABLED(CONFIG_ZMK_USB) && defined(CONFIG_SOC_SERIES_NRF52X)
+/* No USB stack -> no plug/unplug events; poll VBUS and re-apply on change. */
+static bool vbus_last;
+static void vbus_poll_cb(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(vbus_poll_work, vbus_poll_cb);
+static void vbus_poll_cb(struct k_work *work) {
+    bool now = usb_powered();
+    if (now != vbus_last) {
+        vbus_last = now;
+        apply_soon(K_NO_WAIT);
+        if (now) {
+            k_work_reschedule_for_queue(zmk_display_work_q(), &slow_tick_work, K_MSEC(100));
+        }
+    }
+    k_work_reschedule(&vbus_poll_work, K_SECONDS(4));
+}
+#endif
 
 static void peek_end_cb(struct k_work *work) {
     peek_active = false;
@@ -165,6 +190,9 @@ ZMK_SUBSCRIPTION(behavior_disp_switch, zmk_usb_conn_state_changed);
 static int disp_sw_sysinit(void) {
     apply_soon(K_SECONDS(3));
     k_work_reschedule_for_queue(zmk_display_work_q(), &slow_tick_work, K_SECONDS(4));
+#if !IS_ENABLED(CONFIG_ZMK_USB) && defined(CONFIG_SOC_SERIES_NRF52X)
+    k_work_reschedule(&vbus_poll_work, K_SECONDS(5));
+#endif
     return 0;
 }
 SYS_INIT(disp_sw_sysinit, APPLICATION, 99);
