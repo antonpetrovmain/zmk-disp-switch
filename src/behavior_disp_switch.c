@@ -27,6 +27,7 @@
 #include <drivers/behavior.h>
 #include <zephyr/logging/log.h>
 
+#include <lvgl.h>
 #include <zmk/behavior.h>
 #include <zmk/display.h>
 #include <zmk/event_manager.h>
@@ -75,6 +76,22 @@ static void apply_blank_cb(struct k_work *work) {
 
 static void apply_soon(k_timeout_t delay) {
     k_work_reschedule_for_queue(zmk_display_work_q(), &apply_blank_work, delay);
+}
+
+/* ZMK never deep-sleeps on USB power (activity.c), but it still IDLE-blanks
+ * at 30 s and STOPS the LVGL tick timer; we re-light the panel, which would
+ * freeze the content (stale battery/usage numbers shown as current). Keep the
+ * dashboard truthful with a 1 Hz render tick while USB-powered. Duplicate
+ * ticks alongside ZMK's own 10 ms timer are serialized on the same work queue
+ * and harmless; the chain stops itself when USB power goes away. */
+static void slow_tick_cb(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(slow_tick_work, slow_tick_cb);
+static void slow_tick_cb(struct k_work *work) {
+    if (!usb_powered() || !zmk_display_is_initialized()) {
+        return;
+    }
+    lv_task_handler();
+    k_work_reschedule_for_queue(zmk_display_work_q(), &slow_tick_work, K_SECONDS(1));
 }
 
 static void peek_end_cb(struct k_work *work) {
@@ -128,6 +145,7 @@ static int ds_event_cb(const zmk_event_t *eh) {
 #if IS_ENABLED(CONFIG_ZMK_USB)
     if (as_zmk_usb_conn_state_changed(eh) != NULL) {
         apply_soon(K_MSEC(30));
+        k_work_reschedule_for_queue(zmk_display_work_q(), &slow_tick_work, K_MSEC(100));
         return ZMK_EV_EVENT_BUBBLE;
     }
 #endif
@@ -142,6 +160,7 @@ ZMK_SUBSCRIPTION(behavior_disp_switch, zmk_usb_conn_state_changed);
 /* First apply shortly after boot so a battery-powered boot goes dark. */
 static int disp_sw_sysinit(void) {
     apply_soon(K_SECONDS(3));
+    k_work_reschedule_for_queue(zmk_display_work_q(), &slow_tick_work, K_SECONDS(4));
     return 0;
 }
 SYS_INIT(disp_sw_sysinit, APPLICATION, 99);
