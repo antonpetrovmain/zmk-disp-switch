@@ -17,7 +17,10 @@ west.yml: add this repo as a project. Keymap:
 ```dts
 / {
     behaviors {
-        disp_sw: behavior_disp_switch {
+        // Node name MUST be <= 8 chars: ZMK's split relay sends behaviors
+        // by device name in a 9-byte field; longer names truncate and the
+        // peripheral silently drops the press.
+        disp_sw: disp_sw {
             compatible = "zmk,behavior-disp-switch";
             #binding-cells = <1>;
         };
