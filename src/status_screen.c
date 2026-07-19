@@ -43,6 +43,27 @@ __attribute__((weak)) lv_obj_t *zmk_claude_usage_create(lv_obj_t *parent) { retu
 
 static lv_obj_t *eta_label;
 static lv_obj_t *cu_label_ref;
+static lv_obj_t *batt_pct_label;
+
+/* ---- compact battery % (unscii, next to the stock icon-only widget) ------- */
+
+struct batt_state {
+    uint8_t soc;
+};
+
+static struct batt_state batt_get_state(const zmk_event_t *eh) {
+    return (struct batt_state){.soc = zmk_battery_state_of_charge()};
+}
+
+static void batt_update_cb(struct batt_state state) {
+    if (batt_pct_label == NULL) {
+        return;
+    }
+    lv_label_set_text_fmt(batt_pct_label, "%u", state.soc);
+}
+
+ZMK_DISPLAY_WIDGET_LISTENER(widget_batt_pct, struct batt_state, batt_update_cb, batt_get_state)
+ZMK_SUBSCRIPTION(widget_batt_pct, zmk_battery_state_changed);
 
 /* Adaptive layout, called by behavior_disp_switch on the display work queue.
  * USB: ETA hidden (meaningless while charging), usage takes bottom-right.
@@ -60,6 +81,10 @@ void disp_sw_layout_refresh(bool usb) {
     if (cu_label_ref != NULL) {
         lv_obj_align(cu_label_ref, usb ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_TOP_MID, 0, 0);
         lv_obj_clear_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (batt_pct_label != NULL) {
+        /* leave room for the charging bolt glyph next to the icon on USB */
+        lv_obj_align(batt_pct_label, LV_ALIGN_TOP_RIGHT, usb ? -36 : -20, 4);
     }
 }
 
@@ -123,6 +148,11 @@ lv_obj_t *zmk_display_status_screen() {
         lv_obj_align(cu_label_ref, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
         lv_obj_add_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN); /* battery boot default */
     }
+
+    batt_pct_label = lv_label_create(screen);
+    lv_obj_set_style_text_font(batt_pct_label, &lv_font_unscii_8, LV_PART_MAIN);
+    lv_obj_align(batt_pct_label, LV_ALIGN_TOP_RIGHT, -20, 4);
+    widget_batt_pct_init();
 
     eta_label = lv_label_create(screen);
     lv_obj_set_style_text_font(eta_label, &lv_font_unscii_8, LV_PART_MAIN);

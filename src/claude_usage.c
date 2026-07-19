@@ -36,9 +36,9 @@ static void cu_update_cb(struct k_work *work) {
     char text[16];
     if (pct >= 0 && pct <= 100 && wk >= 0 && wk <= 100) {
         /* C = current 5h window, W = 7-day week */
-        snprintf(text, sizeof(text), "C%d%% W%d%%", pct, wk);
+        snprintf(text, sizeof(text), "C%d W%d", pct, wk);
     } else if (pct >= 0 && pct <= 100) {
-        snprintf(text, sizeof(text), "C%d%%", pct);
+        snprintf(text, sizeof(text), "C%d", pct);
     } else {
         snprintf(text, sizeof(text), "C--");
     }
