@@ -1,0 +1,6 @@
+# Data-carrier behavior for Claude usage sync across split halves.
+description: Display usage sync behavior
+
+compatible: "zmk,behavior-disp-usync"
+
+include: one_param.yaml

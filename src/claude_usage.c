@@ -1,14 +1,21 @@
 /*
- * claude_usage — receive Claude Code 5-hour-limit usage over USB CDC-ACM
- * serial and expose it as an OLED label. Protocol: ASCII lines "CU:<0-100>\n"
- * written by the host-side daemon (claude-usage-to-corne.sh). Compiled to
- * nothing unless the claude-uart snippet provides the zmk,claude-uart chosen.
+ * claude_usage — transports for Claude Code usage data (central half only;
+ * requires the claude-uart snippet). Two inputs:
+ *   USB CDC serial lines: "CU:<0-100>" (5h %), "CW:<0-100>" (7d %),
+ *                         "CR:HHMM" (5h reset time, local)
+ *   BLE GATT char 4B5C0002-746F-6E79-0001-636C61756465: bytes
+ *                         [five, week, hh, mm] (2-4 bytes, 0xFF = unknown)
+ *
+ * Distribution is ONE path: invoke the disp_us global behavior with all
+ * values packed in param1 — ZMK runs it locally (left screen) AND relays it
+ * to the peripheral (right screen). Invocation happens from a work item,
+ * never from ISR/BT-rx context.
  *
  * SPDX-License-Identifier: MIT
  */
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
-#include <lvgl.h>
+#include <zmk/behavior.h>
 #include <zmk/display.h>
 
 #if DT_HAS_CHOSEN(zmk_claude_uart)
@@ -23,42 +30,47 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 static const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(zmk_claude_uart));
 
-static lv_obj_t *cu_label;
-static bool cu_stacked; /* battery/top-mid mode: render "C56\nW50" (narrow) */
-static atomic_t cu_pct = ATOMIC_INIT(-1);
-static atomic_t cw_pct = ATOMIC_INIT(-1); /* 7-day window */
+/* latest values; 0xFF = unknown */
+static atomic_t a_five = ATOMIC_INIT(0xFF);
+static atomic_t a_week = ATOMIC_INIT(0xFF);
+static atomic_t a_hh = ATOMIC_INIT(0xFF);
+static atomic_t a_mm = ATOMIC_INIT(0xFF);
 
-static void cu_update_cb(struct k_work *work) {
-    if (cu_label == NULL) {
-        return;
-    }
-    int pct = (int)atomic_get(&cu_pct);
-    int wk = (int)atomic_get(&cw_pct);
-    char text[16];
-    if (pct >= 0 && pct <= 100 && wk >= 0 && wk <= 100) {
-        /* C = current 5h window, W = 7-day week */
-        snprintf(text, sizeof(text), cu_stacked ? "C%d\nW%d" : "C%d W%d", pct, wk);
-    } else if (pct >= 0 && pct <= 100) {
-        snprintf(text, sizeof(text), "C%d", pct);
-    } else {
-        snprintf(text, sizeof(text), "C--");
-    }
-    lv_label_set_text(cu_label, text);
+static void distribute_cb(struct k_work *work) {
+    uint32_t p = ((uint32_t)(atomic_get(&a_five) & 0xFF) << 24) |
+                 ((uint32_t)(atomic_get(&a_week) & 0xFF) << 16) |
+                 ((uint32_t)(atomic_get(&a_hh) & 0xFF) << 8) |
+                 ((uint32_t)(atomic_get(&a_mm) & 0xFF));
+    struct zmk_behavior_binding binding = {.behavior_dev = "disp_us", .param1 = p};
+    struct zmk_behavior_binding_event ev = {
+        .layer = 0, .position = 0, .timestamp = k_uptime_get()};
+    zmk_behavior_invoke_binding(&binding, ev, true);
+    zmk_behavior_invoke_binding(&binding, ev, false);
 }
-static K_WORK_DEFINE(cu_update_work, cu_update_cb);
+static K_WORK_DEFINE(distribute_work, distribute_cb);
 
-/* line accumulator, filled from UART ISR */
+/* ---- USB CDC serial ------------------------------------------------------ */
+
 static char line[16];
 static size_t line_len;
 
 static void handle_line(void) {
     line[line_len] = '\0';
-    if (line_len >= 4 && line[0] == 'C' && line[2] == ':' &&
-        (line[1] == 'U' || line[1] == 'W')) {
-        int pct = atoi(&line[3]);
-        if (pct >= 0 && pct <= 100) {
-            atomic_set(line[1] == 'U' ? &cu_pct : &cw_pct, pct);
-            k_work_submit_to_queue(zmk_display_work_q(), &cu_update_work);
+    if (line_len >= 4 && line[0] == 'C' && line[2] == ':') {
+        if (line[1] == 'U' || line[1] == 'W') {
+            int pct = atoi(&line[3]);
+            if (pct >= 0 && pct <= 100) {
+                atomic_set(line[1] == 'U' ? &a_five : &a_week, pct);
+                k_work_submit(&distribute_work);
+            }
+        } else if (line[1] == 'R' && line_len == 7) { /* CR:HHMM */
+            int hh = (line[3] - '0') * 10 + (line[4] - '0');
+            int mm = (line[5] - '0') * 10 + (line[6] - '0');
+            if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+                atomic_set(&a_hh, hh);
+                atomic_set(&a_mm, mm);
+                k_work_submit(&distribute_work);
+            }
         }
     }
     line_len = 0;
@@ -81,64 +93,7 @@ static void uart_cb(const struct device *dev, void *user_data) {
     }
 }
 
-#if IS_ENABLED(CONFIG_BT)
-/* Custom GATT service: the bonded host writes 2 bytes [five_hour, seven_day]
- * (0-100; 0xFF = unknown) over the existing BLE bond — usage updates without
- * the USB cable. UUID x-...-636c61756465 spells "claude". Encrypted writes
- * only, so only bonded hosts can touch it. */
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/gatt.h>
-#include <zephyr/bluetooth/uuid.h>
-
-#define CLAUDE_SVC_UUID BT_UUID_128_ENCODE(0x4b5c0001, 0x746f, 0x6e79, 0x0001, 0x636c61756465)
-#define CLAUDE_CHR_UUID BT_UUID_128_ENCODE(0x4b5c0002, 0x746f, 0x6e79, 0x0001, 0x636c61756465)
-
-static ssize_t claude_usage_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                                  const void *buf, uint16_t len, uint16_t offset,
-                                  uint8_t flags) {
-    const uint8_t *b = buf;
-    if (offset != 0 || len < 1 || len > 2) {
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-    }
-    if (b[0] <= 100) {
-        atomic_set(&cu_pct, b[0]);
-    }
-    if (len == 2 && b[1] <= 100) {
-        atomic_set(&cw_pct, b[1]);
-    }
-    k_work_submit_to_queue(zmk_display_work_q(), &cu_update_work);
-    return len;
-}
-
-BT_GATT_SERVICE_DEFINE(claude_usage_svc,
-                       BT_GATT_PRIMARY_SERVICE(BT_UUID_DECLARE_128(CLAUDE_SVC_UUID)),
-                       BT_GATT_CHARACTERISTIC(BT_UUID_DECLARE_128(CLAUDE_CHR_UUID),
-                                              BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
-                                              BT_GATT_PERM_WRITE_ENCRYPT, NULL,
-                                              claude_usage_write, NULL), );
-#endif /* IS_ENABLED(CONFIG_BT) */
-
-/* Called by the custom status screen on layout changes: stacked (two-line,
- * narrow, for the battery-mode top-center slot squeezed between the BLE
- * output widget and the battery cluster) vs single-line (USB bottom-right). */
-void zmk_claude_usage_set_stacked(bool stacked) {
-    if (cu_stacked != stacked) {
-        cu_stacked = stacked;
-        k_work_submit_to_queue(zmk_display_work_q(), &cu_update_work);
-    }
-}
-
-/* Called by the custom status screen; strong override of the weak stub. */
-lv_obj_t *zmk_claude_usage_create(lv_obj_t *parent) {
-    cu_label = lv_label_create(parent);
-    lv_label_set_text(cu_label, "C--");
-    return cu_label;
-}
-
-/* (Re)arm RX. Arming once at SYS_INIT races the USB stack on some boots —
- * RX stays silently dead until the next lucky boot (field-observed: same
- * firmware worked after one flash, not after another). Idempotent, so we
- * re-arm on every USB connection event plus staggered boot retries. */
+/* (Re)arm RX — SYS_INIT-only arming races the USB stack on some boots. */
 static void uart_arm_cb(struct k_work *work) {
     if (!device_is_ready(uart)) {
         return;
@@ -159,12 +114,46 @@ ZMK_LISTENER(claude_uart, claude_uart_event_cb);
 ZMK_SUBSCRIPTION(claude_uart, zmk_usb_conn_state_changed);
 #endif
 
-static int claude_uart_init(void) {
-    if (!device_is_ready(uart)) {
-        LOG_WRN("claude-uart device not ready");
+/* ---- BLE GATT ------------------------------------------------------------ */
+
+#if IS_ENABLED(CONFIG_BT)
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/uuid.h>
+
+#define CLAUDE_SVC_UUID BT_UUID_128_ENCODE(0x4b5c0001, 0x746f, 0x6e79, 0x0001, 0x636c61756465)
+#define CLAUDE_CHR_UUID BT_UUID_128_ENCODE(0x4b5c0002, 0x746f, 0x6e79, 0x0001, 0x636c61756465)
+
+static ssize_t claude_usage_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                  const void *buf, uint16_t len, uint16_t offset,
+                                  uint8_t flags) {
+    const uint8_t *b = buf;
+    if (offset != 0 || len < 1 || len > 4) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
-    k_work_reschedule(&uart_arm_work, K_SECONDS(1));
-    /* second staggered retry in case second 1 also raced */
+    if (b[0] <= 100) {
+        atomic_set(&a_five, b[0]);
+    }
+    if (len >= 2 && b[1] <= 100) {
+        atomic_set(&a_week, b[1]);
+    }
+    if (len >= 4 && b[2] <= 23 && b[3] <= 59) {
+        atomic_set(&a_hh, b[2]);
+        atomic_set(&a_mm, b[3]);
+    }
+    k_work_submit(&distribute_work);
+    return len;
+}
+
+BT_GATT_SERVICE_DEFINE(claude_usage_svc,
+                       BT_GATT_PRIMARY_SERVICE(BT_UUID_DECLARE_128(CLAUDE_SVC_UUID)),
+                       BT_GATT_CHARACTERISTIC(BT_UUID_DECLARE_128(CLAUDE_CHR_UUID),
+                                              BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
+                                              BT_GATT_PERM_WRITE_ENCRYPT, NULL,
+                                              claude_usage_write, NULL), );
+#endif /* IS_ENABLED(CONFIG_BT) */
+
+static int claude_uart_init(void) {
     k_work_reschedule(&uart_arm_work, K_SECONDS(1));
     return 0;
 }
