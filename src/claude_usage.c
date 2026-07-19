@@ -76,6 +76,43 @@ static void uart_cb(const struct device *dev, void *user_data) {
     }
 }
 
+#if IS_ENABLED(CONFIG_BT)
+/* Custom GATT service: the bonded host writes 2 bytes [five_hour, seven_day]
+ * (0-100; 0xFF = unknown) over the existing BLE bond — usage updates without
+ * the USB cable. UUID x-...-636c61756465 spells "claude". Encrypted writes
+ * only, so only bonded hosts can touch it. */
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/uuid.h>
+
+#define CLAUDE_SVC_UUID BT_UUID_128_ENCODE(0x4b5c0001, 0x746f, 0x6e79, 0x0001, 0x636c61756465)
+#define CLAUDE_CHR_UUID BT_UUID_128_ENCODE(0x4b5c0002, 0x746f, 0x6e79, 0x0001, 0x636c61756465)
+
+static ssize_t claude_usage_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                  const void *buf, uint16_t len, uint16_t offset,
+                                  uint8_t flags) {
+    const uint8_t *b = buf;
+    if (offset != 0 || len < 1 || len > 2) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+    if (b[0] <= 100) {
+        atomic_set(&cu_pct, b[0]);
+    }
+    if (len == 2 && b[1] <= 100) {
+        atomic_set(&cw_pct, b[1]);
+    }
+    k_work_submit_to_queue(zmk_display_work_q(), &cu_update_work);
+    return len;
+}
+
+BT_GATT_SERVICE_DEFINE(claude_usage_svc,
+                       BT_GATT_PRIMARY_SERVICE(BT_UUID_DECLARE_128(CLAUDE_SVC_UUID)),
+                       BT_GATT_CHARACTERISTIC(BT_UUID_DECLARE_128(CLAUDE_CHR_UUID),
+                                              BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
+                                              BT_GATT_PERM_WRITE_ENCRYPT, NULL,
+                                              claude_usage_write, NULL), );
+#endif /* IS_ENABLED(CONFIG_BT) */
+
 /* Called by the custom status screen; strong override of the weak stub. */
 lv_obj_t *zmk_claude_usage_create(lv_obj_t *parent) {
     cu_label = lv_label_create(parent);
