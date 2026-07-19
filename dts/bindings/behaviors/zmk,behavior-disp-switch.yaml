@@ -1,0 +1,8 @@
+# Display on/off switch: blanks/unblanks the OLED via the Zephyr display API.
+# No ext-power involvement — the controller stays powered (panel off ~= 10 uA)
+# and initialized, so screens-on is instant and typing is never affected.
+description: Display blanking switch behavior
+
+compatible: "zmk,behavior-disp-switch"
+
+include: one_param.yaml

@@ -1,0 +1,6 @@
+name: zmk-disp-switch
+build:
+  cmake: .
+  kconfig: Kconfig
+  settings:
+    dts_root: .
