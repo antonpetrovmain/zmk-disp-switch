@@ -90,6 +90,7 @@ ZMK_SUBSCRIPTION(widget_out_compact, zmk_usb_conn_state_changed);
 /* ---- Claude usage label (usage_display.c) --------------------------------- */
 
 lv_obj_t *zmk_usage_display_create(lv_obj_t *parent);
+lv_obj_t *zmk_costs_display_create(lv_obj_t *parent);
 
 /* ---- battery ETA label ---------------------------------------------------- */
 
@@ -231,6 +232,14 @@ lv_obj_t *zmk_display_status_screen() {
                                lv_theme_get_font_small(screen), LV_PART_MAIN);
     lv_obj_align(zmk_widget_layer_status_obj(&layer_status_widget), LV_ALIGN_BOTTOM_LEFT, 0, 0);
 #endif
+
+    lv_obj_t *costs = zmk_costs_display_create(screen);
+    if (costs != NULL) {
+        lv_obj_set_style_text_font(costs, &lv_font_unscii_8, LV_PART_MAIN);
+        lv_obj_set_style_text_align(costs, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        /* middle band, left-leaning (ETA owns the right of this band on battery) */
+        lv_obj_align(costs, LV_ALIGN_TOP_LEFT, 0, 16);
+    }
 
     cu_label_ref = zmk_usage_display_create(screen);
     if (cu_label_ref != NULL) {

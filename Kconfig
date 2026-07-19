@@ -37,3 +37,10 @@ config ZMK_BEHAVIOR_DISP_USYNC
     bool
     default $(dt_compat_enabled,$(DT_COMPAT_ZMK_BEHAVIOR_DISP_USYNC))
     depends on ZMK_DISPLAY
+
+DT_COMPAT_ZMK_BEHAVIOR_DISP_UCOST := zmk,behavior-disp-ucost
+
+config ZMK_BEHAVIOR_DISP_UCOST
+    bool
+    default $(dt_compat_enabled,$(DT_COMPAT_ZMK_BEHAVIOR_DISP_UCOST))
+    depends on ZMK_DISPLAY

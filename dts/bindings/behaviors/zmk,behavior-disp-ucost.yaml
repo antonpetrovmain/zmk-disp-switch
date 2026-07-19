@@ -1,0 +1,6 @@
+# Data-carrier behavior for daily model-cost sync across split halves.
+description: Display cost sync behavior
+
+compatible: "zmk,behavior-disp-ucost"
+
+include: one_param.yaml
