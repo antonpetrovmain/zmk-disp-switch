@@ -15,6 +15,10 @@
 
 #include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
+#include <zmk/event_manager.h>
+#if IS_ENABLED(CONFIG_ZMK_USB)
+#include <zmk/events/usb_conn_state_changed.h>
+#endif
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 static const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(zmk_claude_uart));
@@ -120,13 +124,37 @@ lv_obj_t *zmk_claude_usage_create(lv_obj_t *parent) {
     return cu_label;
 }
 
-static int claude_uart_init(void) {
+/* (Re)arm RX. Arming once at SYS_INIT races the USB stack on some boots —
+ * RX stays silently dead until the next lucky boot (field-observed: same
+ * firmware worked after one flash, not after another). Idempotent, so we
+ * re-arm on every USB connection event plus staggered boot retries. */
+static void uart_arm_cb(struct k_work *work) {
     if (!device_is_ready(uart)) {
-        LOG_WRN("claude-uart device not ready");
-        return 0;
+        return;
     }
     uart_irq_callback_user_data_set(uart, uart_cb, NULL);
     uart_irq_rx_enable(uart);
+}
+static K_WORK_DELAYABLE_DEFINE(uart_arm_work, uart_arm_cb);
+
+#if IS_ENABLED(CONFIG_ZMK_USB)
+static int claude_uart_event_cb(const zmk_event_t *eh) {
+    if (as_zmk_usb_conn_state_changed(eh) != NULL) {
+        k_work_reschedule(&uart_arm_work, K_MSEC(500));
+    }
+    return ZMK_EV_EVENT_BUBBLE;
+}
+ZMK_LISTENER(claude_uart, claude_uart_event_cb);
+ZMK_SUBSCRIPTION(claude_uart, zmk_usb_conn_state_changed);
+#endif
+
+static int claude_uart_init(void) {
+    if (!device_is_ready(uart)) {
+        LOG_WRN("claude-uart device not ready");
+    }
+    k_work_reschedule(&uart_arm_work, K_SECONDS(1));
+    /* second staggered retry in case second 1 also raced */
+    k_work_reschedule(&uart_arm_work, K_SECONDS(1));
     return 0;
 }
 SYS_INIT(claude_uart_init, APPLICATION, 99);
