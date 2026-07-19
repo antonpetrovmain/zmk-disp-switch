@@ -120,7 +120,7 @@ lv_obj_t *zmk_costs_display_create(lv_obj_t *parent);
 
 /* ---- battery ETA label ---------------------------------------------------- */
 
-static lv_obj_t *eta_label;
+static char eta_text[12]; /* rendered inline before the battery %% */
 static lv_obj_t *cu_label_ref;
 static lv_obj_t *batt_pct_label;
 static lv_obj_t *batt_icon_label;
@@ -133,6 +133,15 @@ static bool batt_usb;
 static void render_batt(void) {
     if (batt_icon_label == NULL) {
         return;
+    }
+    if (batt_pct_label != NULL) {
+        /* one line, right-anchored, grows leftward: "~2d15h 86" on battery,
+         * just "86" while charging (ETA meaningless then) */
+        if (!batt_usb && eta_text[0] != '\0') {
+            lv_label_set_text_fmt(batt_pct_label, "%s %u", eta_text, batt_soc);
+        } else {
+            lv_label_set_text_fmt(batt_pct_label, "%u", batt_soc);
+        }
     }
     const char *sym;
     if (batt_usb) {
@@ -149,9 +158,6 @@ static void render_batt(void) {
         sym = LV_SYMBOL_BATTERY_EMPTY;
     }
     lv_label_set_text(batt_icon_label, sym);
-    if (batt_pct_label != NULL) {
-        lv_label_set_text_fmt(batt_pct_label, "%u", batt_soc);
-    }
 }
 
 /* ---- compact battery % (unscii, next to the stock icon-only widget) ------- */
@@ -178,18 +184,6 @@ ZMK_SUBSCRIPTION(widget_batt_pct, zmk_battery_state_changed);
  * crowded on USB (charging bolt); on battery it is free, and BLE now delivers
  * usage data without the cable, so it must stay visible here too. */
 void disp_sw_layout_refresh(bool usb) {
-    if (eta_label != NULL) {
-        if (usb) {
-            lv_obj_add_flag(eta_label, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_clear_flag(eta_label, LV_OBJ_FLAG_HIDDEN);
-        }
-    }
-    if (eta_label != NULL && !usb) {
-        /* battery mode: ETA lives right-aligned under the battery cluster —
-         * grouped with its family, a full row away from the Claude reset time */
-        lv_obj_align(eta_label, LV_ALIGN_TOP_RIGHT, 0, 16);
-    }
     batt_usb = usb;
     render_batt();
 }
@@ -203,21 +197,17 @@ static struct eta_state eta_get_state(const zmk_event_t *eh) {
 }
 
 static void eta_update_cb(struct eta_state state) {
-    if (eta_label == NULL) {
-        return;
-    }
     /* hours*10 = soc% * mAh * 100 / uA  (dark-screen drain model) */
     uint32_t h10 = ((uint32_t)state.soc * CONFIG_ZMK_DISP_SW_BATT_MAH * 100) /
                    CONFIG_ZMK_DISP_SW_DRAIN_UA;
-    char text[12];
     uint32_t days = h10 / 240;
     uint32_t hours = (h10 % 240) / 10;
     if (days > 0) {
-        snprintf(text, sizeof(text), "~%ud%uh", days, hours);
+        snprintf(eta_text, sizeof(eta_text), "~%ud%uh", days, hours);
     } else {
-        snprintf(text, sizeof(text), "~%u.%uh", h10 / 10, h10 % 10);
+        snprintf(eta_text, sizeof(eta_text), "~%u.%uh", h10 / 10, h10 % 10);
     }
-    lv_label_set_text(eta_label, text);
+    render_batt();
 }
 
 ZMK_DISPLAY_WIDGET_LISTENER(widget_eta, struct eta_state, eta_update_cb, eta_get_state)
@@ -294,10 +284,6 @@ lv_obj_t *zmk_display_status_screen() {
     lv_obj_align(batt_pct_label, LV_ALIGN_TOP_RIGHT, -26, 4);
     widget_batt_pct_init();
 
-    eta_label = lv_label_create(screen);
-    lv_obj_set_style_text_font(eta_label, &lv_font_unscii_8, LV_PART_MAIN);
-    /* battery-mode home from birth — layout_refresh keeps it here */
-    lv_obj_align(eta_label, LV_ALIGN_TOP_RIGHT, 0, 16);
     widget_eta_init();
 
     return screen;
