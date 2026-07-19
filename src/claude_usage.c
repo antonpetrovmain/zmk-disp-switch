@@ -24,6 +24,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 static const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(zmk_claude_uart));
 
 static lv_obj_t *cu_label;
+static bool cu_stacked; /* battery/top-mid mode: render "C56\nW50" (narrow) */
 static atomic_t cu_pct = ATOMIC_INIT(-1);
 static atomic_t cw_pct = ATOMIC_INIT(-1); /* 7-day window */
 
@@ -36,7 +37,7 @@ static void cu_update_cb(struct k_work *work) {
     char text[16];
     if (pct >= 0 && pct <= 100 && wk >= 0 && wk <= 100) {
         /* C = current 5h window, W = 7-day week */
-        snprintf(text, sizeof(text), "C%d W%d", pct, wk);
+        snprintf(text, sizeof(text), cu_stacked ? "C%d\nW%d" : "C%d W%d", pct, wk);
     } else if (pct >= 0 && pct <= 100) {
         snprintf(text, sizeof(text), "C%d", pct);
     } else {
@@ -116,6 +117,16 @@ BT_GATT_SERVICE_DEFINE(claude_usage_svc,
                                               BT_GATT_PERM_WRITE_ENCRYPT, NULL,
                                               claude_usage_write, NULL), );
 #endif /* IS_ENABLED(CONFIG_BT) */
+
+/* Called by the custom status screen on layout changes: stacked (two-line,
+ * narrow, for the battery-mode top-center slot squeezed between the BLE
+ * output widget and the battery cluster) vs single-line (USB bottom-right). */
+void zmk_claude_usage_set_stacked(bool stacked) {
+    if (cu_stacked != stacked) {
+        cu_stacked = stacked;
+        k_work_submit_to_queue(zmk_display_work_q(), &cu_update_work);
+    }
+}
 
 /* Called by the custom status screen; strong override of the weak stub. */
 lv_obj_t *zmk_claude_usage_create(lv_obj_t *parent) {

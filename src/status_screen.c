@@ -38,6 +38,7 @@ static struct zmk_widget_layer_status layer_status_widget;
  * claude-uart snippet is applied; NULL stub otherwise) ---------------------- */
 
 __attribute__((weak)) lv_obj_t *zmk_claude_usage_create(lv_obj_t *parent) { return NULL; }
+__attribute__((weak)) void zmk_claude_usage_set_stacked(bool stacked) { (void)stacked; }
 
 /* ---- battery ETA label ---------------------------------------------------- */
 
@@ -80,6 +81,7 @@ void disp_sw_layout_refresh(bool usb) {
     }
     if (cu_label_ref != NULL) {
         lv_obj_align(cu_label_ref, usb ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_TOP_MID, 0, 0);
+        zmk_claude_usage_set_stacked(!usb);
         lv_obj_clear_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN);
     }
     if (batt_pct_label != NULL) {
@@ -145,6 +147,7 @@ lv_obj_t *zmk_display_status_screen() {
     cu_label_ref = zmk_claude_usage_create(screen);
     if (cu_label_ref != NULL) {
         lv_obj_set_style_text_font(cu_label_ref, &lv_font_unscii_8, LV_PART_MAIN);
+        lv_obj_set_style_text_align(cu_label_ref, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
         lv_obj_align(cu_label_ref, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
         lv_obj_add_flag(cu_label_ref, LV_OBJ_FLAG_HIDDEN); /* battery boot default */
     }
