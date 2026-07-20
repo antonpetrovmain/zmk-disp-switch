@@ -228,6 +228,7 @@ lv_obj_t *zmk_display_status_screen() {
     lv_obj_align(batt_icon_label, LV_ALIGN_TOP_RIGHT, 0, 0);
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) || !IS_ENABLED(CONFIG_ZMK_SPLIT)
     out_icon_label = lv_label_create(screen);
+    lv_obj_set_style_text_font(out_icon_label, &lv_font_montserrat_12, LV_PART_MAIN); /* smaller BT/USB glyph */
     lv_obj_align(out_icon_label, LV_ALIGN_TOP_LEFT, 0, 0);
     out_digit_label = lv_label_create(screen);
     lv_obj_set_style_text_font(out_digit_label, &lv_font_unscii_8, LV_PART_MAIN);
@@ -245,6 +246,7 @@ lv_obj_t *zmk_display_status_screen() {
 #endif
 #if IS_ENABLED(CONFIG_ZMK_SPLIT) && !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
     p_icon_label = lv_label_create(screen);
+    lv_obj_set_style_text_font(p_icon_label, &lv_font_montserrat_12, LV_PART_MAIN); /* smaller BT glyph */
     lv_label_set_text(p_icon_label, LV_SYMBOL_BLUETOOTH);
     lv_obj_align(p_icon_label, LV_ALIGN_TOP_LEFT, 0, 0);
     p_underline = lv_obj_create(screen);
