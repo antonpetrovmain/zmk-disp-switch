@@ -1,7 +1,7 @@
 /*
  * usage_display — per-half Claude usage rendering.
- * Central/left: personal-subscription limits "H<5h%> <HH:MM> W<7d%>".
- * Peripheral/right: work-account per-model spend "<total> F<f> O<o> S<s>" in
+ * Central/left: personal-subscription limits "%<5h%> <HH:MM> W<7d%>".
+ * Peripheral/right: work-account per-model spend "$<total> F<f> O<o> S<s>" in
  *   whole dollars (values carried as integer TENTHS, rounded for display; the
  *   leading bare number is the day's total). On a limits-only keyboard the
  *   right instead shows "W<7d%>".
@@ -35,16 +35,16 @@ static void update_cb(struct k_work *work) {
     int mm = (int)atomic_get(&v_mm);
     bool have_costs = atomic_get(&v_o) >= 0 || atomic_get(&v_s) >= 0 || atomic_get(&v_f) >= 0;
     if (five >= 0 && week >= 0 && hh >= 0) {
-        snprintf(text, sizeof(text), "H%02d %02d:%02d W%02d", five, hh, mm, week);
+        snprintf(text, sizeof(text), "%%%02d %02d:%02d W%02d", five, hh, mm, week);
     } else if (five >= 0 && hh >= 0) {
-        snprintf(text, sizeof(text), "H%02d %02d:%02d", five, hh, mm);
+        snprintf(text, sizeof(text), "%%%02d %02d:%02d", five, hh, mm);
     } else if (five >= 0) {
-        snprintf(text, sizeof(text), "H%02d", five);
+        snprintf(text, sizeof(text), "%%%02d", five);
     } else if (have_costs) {
-        /* costs-only keyboard: no limits feed -> no H-- placeholder */
+        /* costs-only keyboard: no limits feed -> no %-- placeholder */
         text[0] = '\0';
     } else {
-        snprintf(text, sizeof(text), "H--");
+        snprintf(text, sizeof(text), "%%--");
     }
     lv_label_set_text(label, text);
 #else
@@ -56,7 +56,7 @@ static void update_cb(struct k_work *work) {
         int Od = o < 0 ? 0 : (o + 5) / 10;
         int Sd = s < 0 ? 0 : (s + 5) / 10;
         int Fd = f < 0 ? 0 : (f + 5) / 10;
-        snprintf(text, sizeof(text), "%d F%d O%d S%d", Od + Sd + Fd, Fd, Od, Sd);
+        snprintf(text, sizeof(text), "$%d F%d O%d S%d", Od + Sd + Fd, Fd, Od, Sd);
     } else if (week >= 0) {
         snprintf(text, sizeof(text), "W%02d", week);
     } else {
