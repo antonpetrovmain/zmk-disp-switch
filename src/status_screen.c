@@ -157,29 +157,26 @@ static void render_batt(void) {
     if (batt_pct_label != NULL) {
         /* "2d15h 86" — ETA + %. ETA is computed INLINE from batt_soc here (not
          * via a separate widget) so it can never fail to appear: batt_soc is
-         * updated by batt_update_cb, which demonstrably runs (the % renders),
-         * and this same call renders the ETA. Not gated on charge state — the
-         * bolt icon signals charging; USB detection proved unreliable. */
+         * updated by batt_update_cb, which demonstrably runs, and this same
+         * call renders the ETA. Not gated on charge state — the bolt icon
+         * signals charging.
+         * Low-battery alert = a leading "!" (NO colour styling: an explicit
+         * text_color made the whole label invisible on this mono OLED, where
+         * the default text is the lit colour and white maps to OFF). */
+        const char *w = batt_soc <= CONFIG_ZMK_DISP_SW_BATT_LOW_PCT ? "!" : "";
         if (batt_soc > 0) {
             uint32_t h10 = ((uint32_t)batt_soc * CONFIG_ZMK_DISP_SW_BATT_MAH * 100) /
                            CONFIG_ZMK_DISP_SW_DRAIN_UA;
             uint32_t days = h10 / 240, hours = (h10 % 240) / 10;
             if (days > 0) {
-                lv_label_set_text_fmt(batt_pct_label, "%ud%uh %02u", days, hours, batt_soc);
+                lv_label_set_text_fmt(batt_pct_label, "%s%ud%uh %02u", w, days, hours, batt_soc);
             } else {
-                lv_label_set_text_fmt(batt_pct_label, "%u.%uh %02u", h10 / 10, h10 % 10, batt_soc);
+                lv_label_set_text_fmt(batt_pct_label, "%s%u.%uh %02u", w, h10 / 10, h10 % 10,
+                                      batt_soc);
             }
         } else {
-            lv_label_set_text_fmt(batt_pct_label, "%02u", batt_soc);
+            lv_label_set_text_fmt(batt_pct_label, "%s%02u", w, batt_soc);
         }
-        /* low-battery alert: invert the reading when critically low. Based on
-         * SOC alone (not batt_usb) so an unreliable USB signal can't suppress
-         * the warning. */
-        bool low = batt_soc <= CONFIG_ZMK_DISP_SW_BATT_LOW_PCT;
-        lv_obj_set_style_bg_color(batt_pct_label, lv_color_white(), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(batt_pct_label, low ? LV_OPA_COVER : LV_OPA_TRANSP, LV_PART_MAIN);
-        lv_obj_set_style_text_color(batt_pct_label, low ? lv_color_black() : lv_color_white(),
-                                    LV_PART_MAIN);
     }
     const char *sym;
     if (batt_usb) {

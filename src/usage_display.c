@@ -34,12 +34,16 @@ static void update_cb(struct k_work *work) {
     int hh = (int)atomic_get(&v_hh);
     int mm = (int)atomic_get(&v_mm);
     bool have_costs = atomic_get(&v_o) >= 0 || atomic_get(&v_s) >= 0 || atomic_get(&v_f) >= 0;
+    /* near-cap warning = a leading "!" (NO colour styling — an explicit
+     * text_color rendered white = OFF on this mono OLED and hid the label). */
+    const char *w = (five >= CONFIG_ZMK_DISP_SW_LIMIT_WARN_PCT ||
+                     week >= CONFIG_ZMK_DISP_SW_LIMIT_WARN_PCT) ? "!" : "";
     if (five >= 0 && week >= 0 && hh >= 0) {
-        snprintf(text, sizeof(text), "%%%02d %02d:%02d W%02d", five, hh, mm, week);
+        snprintf(text, sizeof(text), "%s%%%02d %02d:%02d W%02d", w, five, hh, mm, week);
     } else if (five >= 0 && hh >= 0) {
-        snprintf(text, sizeof(text), "%%%02d %02d:%02d", five, hh, mm);
+        snprintf(text, sizeof(text), "%s%%%02d %02d:%02d", w, five, hh, mm);
     } else if (five >= 0) {
-        snprintf(text, sizeof(text), "%%%02d", five);
+        snprintf(text, sizeof(text), "%s%%%02d", w, five);
     } else if (have_costs) {
         /* costs-only keyboard: no limits feed -> no %-- placeholder */
         text[0] = '\0';
@@ -47,12 +51,6 @@ static void update_cb(struct k_work *work) {
         snprintf(text, sizeof(text), "%%--");
     }
     lv_label_set_text(label, text);
-    /* near-cap warning: invert the limits line when 5h or 7d usage is high */
-    bool warn = five >= CONFIG_ZMK_DISP_SW_LIMIT_WARN_PCT ||
-                week >= CONFIG_ZMK_DISP_SW_LIMIT_WARN_PCT;
-    lv_obj_set_style_bg_color(label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(label, warn ? LV_OPA_COVER : LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_text_color(label, warn ? lv_color_black() : lv_color_white(), LV_PART_MAIN);
 #else
     int week = (int)atomic_get(&v_week);
     int o = (int)atomic_get(&v_o), s = (int)atomic_get(&v_s), f = (int)atomic_get(&v_f);
