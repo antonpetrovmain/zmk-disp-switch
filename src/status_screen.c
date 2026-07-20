@@ -156,15 +156,20 @@ static void render_batt(void) {
         return;
     }
     if (batt_pct_label != NULL) {
-        /* one line, right-anchored, grows leftward: "2d15h 86" on battery,
-         * just "86" while charging (ETA meaningless then) */
-        if (!batt_usb && eta_text[0] != '\0') {
+        /* one line, right-anchored, grows leftward: "2d15h 86". ETA is shown
+         * whenever we have one — NOT gated on charge state. (It used to hide
+         * while batt_usb was true, but USB/VBUS detection proved unreliable on
+         * this hardware and kept hiding the ETA on battery; the charge BOLT
+         * icon already signals charging, so the ETA can safely stay put.) */
+        if (eta_text[0] != '\0') {
             lv_label_set_text_fmt(batt_pct_label, "%s %02u", eta_text, batt_soc);
         } else {
             lv_label_set_text_fmt(batt_pct_label, "%02u", batt_soc);
         }
-        /* low-battery alert: invert the reading when critically low on battery */
-        bool low = !batt_usb && batt_soc <= CONFIG_ZMK_DISP_SW_BATT_LOW_PCT;
+        /* low-battery alert: invert the reading when critically low. Based on
+         * SOC alone (not batt_usb) so an unreliable USB signal can't suppress
+         * the warning. */
+        bool low = batt_soc <= CONFIG_ZMK_DISP_SW_BATT_LOW_PCT;
         lv_obj_set_style_bg_color(batt_pct_label, lv_color_white(), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(batt_pct_label, low ? LV_OPA_COVER : LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_text_color(batt_pct_label, low ? lv_color_black() : lv_color_white(),
