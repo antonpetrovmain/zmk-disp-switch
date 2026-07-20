@@ -1,10 +1,9 @@
 /*
  * behavior_disp_uc — data-carrier behavior for daily model-cost sync.
- * param1 = opus<<20 | sonnet<<10 | fable (10 bits each, integer dollars,
- * 1023 = unknown/overflow). param2 = haiku (10 bits, same encoding) — carried
- * for the central's left-side "O S H" line; the peripheral ignores it and
- * renders only Fable. GLOBAL locality relays both params to the peripheral.
- * Node name <= 8 chars.
+ * param1 = opus<<16 | sonnet ; param2 = fable. Each is a 16-bit dollar amount
+ * in TENTHS (0..65534; 0xFFFF = unknown/overflow) — wide enough now that Haiku
+ * was dropped and freed the bits. GLOBAL locality relays both params to the
+ * peripheral, which renders "O$x.x S$x.x F$x.x". Node name <= 8 chars.
  *
  * SPDX-License-Identifier: MIT
  */
@@ -17,15 +16,14 @@
 
 #if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
 
-__attribute__((weak)) void zmk_costs_set(int o, int s, int f, int h) {}
+__attribute__((weak)) void zmk_costs_set(int o, int s, int f) {}
 
-static int dec(uint32_t v) { return v >= 1023 ? -1 : (int)v; }
+static int dec(uint32_t v) { return v >= 0xFFFF ? -1 : (int)v; }
 
 static int on_pressed(struct zmk_behavior_binding *binding,
                       struct zmk_behavior_binding_event event) {
-    uint32_t p = binding->param1;
-    zmk_costs_set(dec((p >> 20) & 0x3FF), dec((p >> 10) & 0x3FF), dec(p & 0x3FF),
-                  dec(binding->param2 & 0x3FF));
+    uint32_t p1 = binding->param1;
+    zmk_costs_set(dec((p1 >> 16) & 0xFFFF), dec(p1 & 0xFFFF), dec(binding->param2 & 0xFFFF));
     return ZMK_BEHAVIOR_OPAQUE;
 }
 

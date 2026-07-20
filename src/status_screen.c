@@ -145,17 +145,23 @@ static void render_batt(void) {
     }
     const char *sym;
     if (batt_usb) {
+        /* charge bolt in a smaller font so it doesn't drop toward the second
+         * line (Montserrat 16 bolt hangs low and looked cramped when cabled) */
+        lv_obj_set_style_text_font(batt_icon_label, &lv_font_montserrat_12, LV_PART_MAIN);
         sym = LV_SYMBOL_CHARGE;
-    } else if (batt_soc > 87) {
-        sym = LV_SYMBOL_BATTERY_FULL;
-    } else if (batt_soc > 62) {
-        sym = LV_SYMBOL_BATTERY_3;
-    } else if (batt_soc > 37) {
-        sym = LV_SYMBOL_BATTERY_2;
-    } else if (batt_soc > 12) {
-        sym = LV_SYMBOL_BATTERY_1;
     } else {
-        sym = LV_SYMBOL_BATTERY_EMPTY;
+        lv_obj_set_style_text_font(batt_icon_label, &lv_font_montserrat_16, LV_PART_MAIN);
+        if (batt_soc > 87) {
+            sym = LV_SYMBOL_BATTERY_FULL;
+        } else if (batt_soc > 62) {
+            sym = LV_SYMBOL_BATTERY_3;
+        } else if (batt_soc > 37) {
+            sym = LV_SYMBOL_BATTERY_2;
+        } else if (batt_soc > 12) {
+            sym = LV_SYMBOL_BATTERY_1;
+        } else {
+            sym = LV_SYMBOL_BATTERY_EMPTY;
+        }
     }
     lv_label_set_text(batt_icon_label, sym);
 }
@@ -262,11 +268,10 @@ lv_obj_t *zmk_display_status_screen() {
     lv_obj_t *costs = zmk_costs_display_create(screen);
     if (costs != NULL) {
         lv_obj_set_style_text_font(costs, &lv_font_unscii_8, LV_PART_MAIN);
-        lv_obj_set_style_text_align(costs, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
-        /* right-anchored, grows leftward: clears the left BT/USB glyph, and
-         * sits one row under the battery/ETA cluster. In costs mode the
-         * bottom-right limits line is empty, so this row is uncontested. */
-        lv_obj_align(costs, LV_ALIGN_TOP_RIGHT, 0, 16);
+        lv_obj_set_style_text_align(costs, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        /* "cc" Claude Code badge, centered in the free middle band (limits sit
+         * bottom-right, battery top-right, layer bottom-left) */
+        lv_obj_align(costs, LV_ALIGN_TOP_MID, 0, 16);
     }
 
     cu_label_ref = zmk_usage_display_create(screen);
