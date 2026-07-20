@@ -17,9 +17,30 @@
 #include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
 
-#if IS_ENABLED(CONFIG_ZMK_WIDGET_LAYER_STATUS)
-#include <zmk/display/widgets/layer_status.h>
-static struct zmk_widget_layer_status layer_status_widget;
+/* Own layer indicator: just the active layer NUMBER (the stock widget prefixes
+ * LV_SYMBOL_KEYBOARD, which crowded the left OLED). Central only. */
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) || !IS_ENABLED(CONFIG_ZMK_SPLIT)
+#include <zmk/keymap.h>
+#include <zmk/events/layer_state_changed.h>
+
+static lv_obj_t *layer_label;
+
+struct layer_state {
+    uint8_t index;
+};
+
+static struct layer_state layer_get_state(const zmk_event_t *eh) {
+    return (struct layer_state){.index = zmk_keymap_highest_layer_active()};
+}
+
+static void layer_update_cb(struct layer_state st) {
+    if (layer_label != NULL) {
+        lv_label_set_text_fmt(layer_label, "%d", st.index);
+    }
+}
+
+ZMK_DISPLAY_WIDGET_LISTENER(widget_layer_num, struct layer_state, layer_update_cb, layer_get_state)
+ZMK_SUBSCRIPTION(widget_layer_num, zmk_layer_state_changed);
 #endif
 
 /* ---- compact output indicator (central only) ------------------------------
@@ -260,11 +281,12 @@ lv_obj_t *zmk_display_status_screen() {
     lv_obj_align(p_underline, LV_ALIGN_TOP_LEFT, 2, 13);
     widget_perif_compact_init();
 #endif
-#if IS_ENABLED(CONFIG_ZMK_WIDGET_LAYER_STATUS)
-    zmk_widget_layer_status_init(&layer_status_widget, screen);
-    lv_obj_set_style_text_font(zmk_widget_layer_status_obj(&layer_status_widget),
-                               lv_theme_get_font_small(screen), LV_PART_MAIN);
-    lv_obj_align(zmk_widget_layer_status_obj(&layer_status_widget), LV_ALIGN_BOTTOM_LEFT, 0, 0);
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) || !IS_ENABLED(CONFIG_ZMK_SPLIT)
+    layer_label = lv_label_create(screen);
+    lv_obj_set_style_text_font(layer_label, &lv_font_unscii_8, LV_PART_MAIN);
+    lv_obj_align(layer_label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    lv_label_set_text(layer_label, "0");
+    widget_layer_num_init();
 #endif
 
     lv_obj_t *costs = zmk_costs_display_create(screen);
