@@ -141,7 +141,6 @@ lv_obj_t *zmk_costs_display_create(lv_obj_t *parent);
 
 /* ---- battery ETA label ---------------------------------------------------- */
 
-static char eta_text[12]; /* rendered inline before the battery %% */
 static lv_obj_t *cu_label_ref;
 static lv_obj_t *batt_pct_label;
 static lv_obj_t *batt_icon_label;
@@ -156,13 +155,20 @@ static void render_batt(void) {
         return;
     }
     if (batt_pct_label != NULL) {
-        /* one line, right-anchored, grows leftward: "2d15h 86". ETA is shown
-         * whenever we have one — NOT gated on charge state. (It used to hide
-         * while batt_usb was true, but USB/VBUS detection proved unreliable on
-         * this hardware and kept hiding the ETA on battery; the charge BOLT
-         * icon already signals charging, so the ETA can safely stay put.) */
-        if (eta_text[0] != '\0') {
-            lv_label_set_text_fmt(batt_pct_label, "%s %02u", eta_text, batt_soc);
+        /* "2d15h 86" — ETA + %. ETA is computed INLINE from batt_soc here (not
+         * via a separate widget) so it can never fail to appear: batt_soc is
+         * updated by batt_update_cb, which demonstrably runs (the % renders),
+         * and this same call renders the ETA. Not gated on charge state — the
+         * bolt icon signals charging; USB detection proved unreliable. */
+        if (batt_soc > 0) {
+            uint32_t h10 = ((uint32_t)batt_soc * CONFIG_ZMK_DISP_SW_BATT_MAH * 100) /
+                           CONFIG_ZMK_DISP_SW_DRAIN_UA;
+            uint32_t days = h10 / 240, hours = (h10 % 240) / 10;
+            if (days > 0) {
+                lv_label_set_text_fmt(batt_pct_label, "%ud%uh %02u", days, hours, batt_soc);
+            } else {
+                lv_label_set_text_fmt(batt_pct_label, "%u.%uh %02u", h10 / 10, h10 % 10, batt_soc);
+            }
         } else {
             lv_label_set_text_fmt(batt_pct_label, "%02u", batt_soc);
         }
@@ -226,30 +232,8 @@ void disp_sw_layout_refresh(bool usb) {
     render_batt();
 }
 
-struct eta_state {
-    uint8_t soc;
-};
-
-static struct eta_state eta_get_state(const zmk_event_t *eh) {
-    return (struct eta_state){.soc = zmk_battery_state_of_charge()};
-}
-
-static void eta_update_cb(struct eta_state state) {
-    /* hours*10 = soc% * mAh * 100 / uA  (dark-screen drain model) */
-    uint32_t h10 = ((uint32_t)state.soc * CONFIG_ZMK_DISP_SW_BATT_MAH * 100) /
-                   CONFIG_ZMK_DISP_SW_DRAIN_UA;
-    uint32_t days = h10 / 240;
-    uint32_t hours = (h10 % 240) / 10;
-    if (days > 0) {
-        snprintf(eta_text, sizeof(eta_text), "%ud%uh", days, hours);
-    } else {
-        snprintf(eta_text, sizeof(eta_text), "%u.%uh", h10 / 10, h10 % 10);
-    }
-    render_batt();
-}
-
-ZMK_DISPLAY_WIDGET_LISTENER(widget_eta, struct eta_state, eta_update_cb, eta_get_state)
-ZMK_SUBSCRIPTION(widget_eta, zmk_battery_state_changed);
+/* (The battery ETA is now computed inline in render_batt from batt_soc — no
+ * separate widget, so it can't fail to appear.) */
 
 /* ---- screen --------------------------------------------------------------- */
 
@@ -326,8 +310,6 @@ lv_obj_t *zmk_display_status_screen() {
     lv_obj_set_style_text_font(batt_pct_label, &lv_font_unscii_8, LV_PART_MAIN);
     lv_obj_align(batt_pct_label, LV_ALIGN_TOP_RIGHT, -26, 4);
     widget_batt_pct_init();
-
-    widget_eta_init();
 
     return screen;
 }
