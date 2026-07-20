@@ -38,6 +38,7 @@ static atomic_t a_mm = ATOMIC_INIT(0xFF);
 static atomic_t a_o = ATOMIC_INIT(-1); /* $ today per model */
 static atomic_t a_s = ATOMIC_INIT(-1);
 static atomic_t a_f = ATOMIC_INIT(-1);
+static atomic_t a_h = ATOMIC_INIT(-1); /* haiku $ (left-rendered with O/S) */
 
 static void distribute_cb(struct k_work *work) {
     uint32_t p = ((uint32_t)(atomic_get(&a_five) & 0xFF) << 24) |
@@ -50,12 +51,14 @@ static void distribute_cb(struct k_work *work) {
     zmk_behavior_invoke_binding(&binding, ev, true);
     zmk_behavior_invoke_binding(&binding, ev, false);
 
-    int o = (int)atomic_get(&a_o), sm = (int)atomic_get(&a_s), f = (int)atomic_get(&a_f);
-    if (o >= 0 || sm >= 0 || f >= 0) {
+    int o = (int)atomic_get(&a_o), sm = (int)atomic_get(&a_s), f = (int)atomic_get(&a_f),
+        h = (int)atomic_get(&a_h);
+    if (o >= 0 || sm >= 0 || f >= 0 || h >= 0) {
 #define UC_ENC(v) ((uint32_t)((v) < 0 ? 1023 : ((v) > 1022 ? 1022 : (v))))
         struct zmk_behavior_binding cost_binding = {
             .behavior_dev = "disp_uc",
-            .param1 = (UC_ENC(o) << 20) | (UC_ENC(sm) << 10) | UC_ENC(f)};
+            .param1 = (UC_ENC(o) << 20) | (UC_ENC(sm) << 10) | UC_ENC(f),
+            .param2 = UC_ENC(h)};
 #undef UC_ENC
         zmk_behavior_invoke_binding(&cost_binding, ev, true);
         zmk_behavior_invoke_binding(&cost_binding, ev, false);
@@ -71,7 +74,7 @@ static size_t line_len;
 static void handle_line(void) {
     line[line_len] = '\0';
     if (line_len >= 4 && line[0] == 'D' && line[2] == ':') {
-        /* DO:/DS:/DF: — integer dollars spent today per model */
+        /* DO:/DS:/DF:/DH: — integer dollars spent today per model */
         int d = atoi(&line[3]);
         if (d >= 0 && d <= 65535) {
             if (line[1] == 'O') {
@@ -80,6 +83,8 @@ static void handle_line(void) {
                 atomic_set(&a_s, d);
             } else if (line[1] == 'F') {
                 atomic_set(&a_f, d);
+            } else if (line[1] == 'H') {
+                atomic_set(&a_h, d);
             } else {
                 line_len = 0;
                 return;
@@ -180,25 +185,21 @@ static ssize_t claude_usage_write(struct bt_conn *conn, const struct bt_gatt_att
 
 #define CLAUDE_COST_UUID BT_UUID_128_ENCODE(0x4b5c0003, 0x746f, 0x6e79, 0x0001, 0x636c61756465)
 
-/* 6 bytes: opus, sonnet, fable as uint16 BE dollars; 0xFFFF = unknown */
+/* 6 or 8 bytes: opus, sonnet, fable[, haiku] as uint16 BE dollars; 0xFFFF =
+ * unknown. 8 = new host (with haiku); 6 = older host (no haiku) still works. */
 static ssize_t claude_cost_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                                  const void *buf, uint16_t len, uint16_t offset, uint8_t flags) {
     const uint8_t *b = buf;
-    if (offset != 0 || len != 6) {
+    if (offset != 0 || (len != 6 && len != 8)) {
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
-    uint16_t v[3];
-    for (int i = 0; i < 3; i++) {
-        v[i] = ((uint16_t)b[i * 2] << 8) | b[i * 2 + 1];
-    }
-    if (v[0] != 0xFFFF) {
-        atomic_set(&a_o, v[0]);
-    }
-    if (v[1] != 0xFFFF) {
-        atomic_set(&a_s, v[1]);
-    }
-    if (v[2] != 0xFFFF) {
-        atomic_set(&a_f, v[2]);
+    atomic_t *slots[4] = {&a_o, &a_s, &a_f, &a_h};
+    int n = len / 2;
+    for (int i = 0; i < n; i++) {
+        uint16_t v = ((uint16_t)b[i * 2] << 8) | b[i * 2 + 1];
+        if (v != 0xFFFF) {
+            atomic_set(slots[i], v);
+        }
     }
     k_work_submit(&distribute_work);
     return len;

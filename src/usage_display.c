@@ -20,12 +20,13 @@ static atomic_t v_mm = ATOMIC_INIT(-1);
 static atomic_t v_o = ATOMIC_INIT(-1); /* $ today per model (int dollars) */
 static atomic_t v_s = ATOMIC_INIT(-1);
 static atomic_t v_f = ATOMIC_INIT(-1);
+static atomic_t v_h = ATOMIC_INIT(-1); /* haiku $ — left-rendered with O/S */
 
 static void update_cb(struct k_work *work) {
     if (label == NULL) {
         return;
     }
-    char text[20];
+    char text[28];
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) || !IS_ENABLED(CONFIG_ZMK_SPLIT)
     int five = (int)atomic_get(&v_five);
     int hh = (int)atomic_get(&v_hh);
@@ -34,7 +35,8 @@ static void update_cb(struct k_work *work) {
         snprintf(text, sizeof(text), "C%02d %02d:%02d", five, hh, mm);
     } else if (five >= 0) {
         snprintf(text, sizeof(text), "C%02d", five);
-    } else if (atomic_get(&v_o) >= 0 || atomic_get(&v_s) >= 0 || atomic_get(&v_f) >= 0) {
+    } else if (atomic_get(&v_o) >= 0 || atomic_get(&v_s) >= 0 || atomic_get(&v_f) >= 0 ||
+               atomic_get(&v_h) >= 0) {
         /* costs-only keyboard: no limits feed -> no C-- placeholder */
         text[0] = '\0';
     } else {
@@ -42,9 +44,10 @@ static void update_cb(struct k_work *work) {
     }
     lv_label_set_text(label, text);
     if (cost_label != NULL) {
-        int o = (int)atomic_get(&v_o), sm = (int)atomic_get(&v_s);
-        if (o >= 0 || sm >= 0) {
-            snprintf(text, sizeof(text), "O%d S%d", o < 0 ? 0 : o, sm < 0 ? 0 : sm);
+        int o = (int)atomic_get(&v_o), sm = (int)atomic_get(&v_s), h = (int)atomic_get(&v_h);
+        if (o >= 0 || sm >= 0 || h >= 0) {
+            snprintf(text, sizeof(text), "O%d S%d H%d",
+                     o < 0 ? 0 : o, sm < 0 ? 0 : sm, h < 0 ? 0 : h);
             lv_label_set_text(cost_label, text);
         } else {
             lv_label_set_text(cost_label, "");
@@ -83,7 +86,7 @@ void zmk_usage_set(int five, int week, int hh, int mm) {
     k_work_submit_to_queue(zmk_display_work_q(), &update_work);
 }
 
-void zmk_costs_set(int o, int s, int f) {
+void zmk_costs_set(int o, int s, int f, int h) {
     if (o >= 0 && o <= 65535) {
         atomic_set(&v_o, o);
     }
@@ -92,6 +95,9 @@ void zmk_costs_set(int o, int s, int f) {
     }
     if (f >= 0 && f <= 65535) {
         atomic_set(&v_f, f);
+    }
+    if (h >= 0 && h <= 65535) {
+        atomic_set(&v_h, h);
     }
     k_work_submit_to_queue(zmk_display_work_q(), &update_work);
 }
