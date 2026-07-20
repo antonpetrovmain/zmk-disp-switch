@@ -54,15 +54,18 @@ static bool user_off = true; /* battery default: dark from boot */
 static bool peek_active;
 
 static bool usb_powered(void) {
-#if defined(CONFIG_SOC_SERIES_NRF52X)
-    /* Raw VBUS from the nRF POWER peripheral. True even on a dumb charger (no
-     * data enumeration) and identical on central + peripheral — more reliable
-     * than zmk_usb_is_powered(), which stays false when powered by a charger
-     * rather than a data host (that's why a cabled half stayed in battery
-     * mode). Reading the register needs no USB stack. */
-    return nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
-#elif IS_ENABLED(CONFIG_ZMK_USB)
+#if IS_ENABLED(CONFIG_ZMK_USB)
+    /* Central: zmk_usb_is_powered() already tracks VBUS (USB_DC_CONNECTED fires
+     * on 5V present, data or charger). This is the known-good path that showed
+     * the ETA correctly on battery all along — do NOT swap it for the raw VBUS
+     * register: doing so regressed the battery ETA (it vanished on battery,
+     * 2026-07-20). */
     return zmk_usb_is_powered();
+#elif defined(CONFIG_SOC_SERIES_NRF52X)
+    /* Peripheral: no USB stack (central-only Kconfig), so read VBUS presence
+     * straight from the nRF POWER peripheral. Proven correct (false on battery)
+     * — the peripheral ETA worked with this before. */
+    return nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
 #else
     return false;
 #endif
@@ -108,10 +111,9 @@ static void slow_tick_cb(struct k_work *work) {
     k_work_reschedule_for_queue(zmk_display_work_q(), &slow_tick_work, K_SECONDS(1));
 }
 
-#if defined(CONFIG_SOC_SERIES_NRF52X)
-/* Poll raw VBUS and re-apply on change. Needed on the peripheral (no USB stack
- * / events at all) AND on the central (a charger-only connection fires no USB
- * conn event, so events alone miss it). */
+#if !IS_ENABLED(CONFIG_ZMK_USB) && defined(CONFIG_SOC_SERIES_NRF52X)
+/* Peripheral only: no USB stack -> no plug/unplug events; poll VBUS and
+ * re-apply on change. The central gets real USB conn events instead. */
 static bool vbus_last;
 static void vbus_poll_cb(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(vbus_poll_work, vbus_poll_cb);
@@ -195,7 +197,7 @@ ZMK_SUBSCRIPTION(behavior_disp_switch, zmk_usb_conn_state_changed);
 static int disp_sw_sysinit(void) {
     apply_soon(K_SECONDS(3));
     k_work_reschedule_for_queue(zmk_display_work_q(), &slow_tick_work, K_SECONDS(4));
-#if defined(CONFIG_SOC_SERIES_NRF52X)
+#if !IS_ENABLED(CONFIG_ZMK_USB) && defined(CONFIG_SOC_SERIES_NRF52X)
     k_work_reschedule(&vbus_poll_work, K_SECONDS(5));
 #endif
     return 0;
