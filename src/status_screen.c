@@ -284,7 +284,8 @@ lv_obj_t *zmk_display_status_screen() {
         /* the position Tony likes on USB — now permanent in every mode */
         lv_obj_align(cu_label_ref, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
 #else
-        lv_obj_align(cu_label_ref, LV_ALIGN_TOP_MID, 0, 16);
+        /* costs pinned to the bottom row (battery/BT own the top) */
+        lv_obj_align(cu_label_ref, LV_ALIGN_BOTTOM_MID, 0, 0);
 #endif
     }
 

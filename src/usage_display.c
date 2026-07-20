@@ -54,8 +54,8 @@ static void update_cb(struct k_work *work) {
         /* no per-value '$' — 8px/char leaves only ~16 chars, and O$x.x S$x.x
          * F$x.x overflows (F clipped). Decimal kept; these are Claude Code $. */
         int O = o < 0 ? 0 : o, S = s < 0 ? 0 : s, F = f < 0 ? 0 : f;
-        snprintf(text, sizeof(text), "O%d.%d S%d.%d F%d.%d",
-                 O / 10, O % 10, S / 10, S % 10, F / 10, F % 10);
+        snprintf(text, sizeof(text), "F%d.%d O%d.%d S%d.%d",
+                 F / 10, F % 10, O / 10, O % 10, S / 10, S % 10);
     } else if (week >= 0) {
         snprintf(text, sizeof(text), "W%02d", week);
     } else {
