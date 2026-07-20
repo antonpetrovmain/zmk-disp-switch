@@ -1,10 +1,10 @@
 /*
  * usage_display — per-half Claude usage rendering.
- * Central/left: personal-subscription limits "W<7d%> C<5h%> <HH:MM>" (7d% +
- *   5h% + reset time).
- * Peripheral/right: work-account per-model spend "O0.0 S2.8 F14.3" (dollars
- *   carried as integer TENTHS, 1 decimal, no per-value $ — width-limited). On a
- *   limits-only keyboard the right instead shows "W<7d%>".
+ * Central/left: personal-subscription limits "H<5h%> <HH:MM> W<7d%>".
+ * Peripheral/right: work-account per-model spend "<total> F<f> O<o> S<s>" in
+ *   whole dollars (values carried as integer TENTHS, rounded for display; the
+ *   leading bare number is the day's total). On a limits-only keyboard the
+ *   right instead shows "W<7d%>".
  * Values arrive via zmk_usage_set()/zmk_costs_set() from the transports
  * (central) or the relayed behaviors (peripheral).
  *
@@ -35,27 +35,28 @@ static void update_cb(struct k_work *work) {
     int mm = (int)atomic_get(&v_mm);
     bool have_costs = atomic_get(&v_o) >= 0 || atomic_get(&v_s) >= 0 || atomic_get(&v_f) >= 0;
     if (five >= 0 && week >= 0 && hh >= 0) {
-        snprintf(text, sizeof(text), "W%02d C%02d %02d:%02d", week, five, hh, mm);
+        snprintf(text, sizeof(text), "H%02d %02d:%02d W%02d", five, hh, mm, week);
     } else if (five >= 0 && hh >= 0) {
-        snprintf(text, sizeof(text), "C%02d %02d:%02d", five, hh, mm);
+        snprintf(text, sizeof(text), "H%02d %02d:%02d", five, hh, mm);
     } else if (five >= 0) {
-        snprintf(text, sizeof(text), "C%02d", five);
+        snprintf(text, sizeof(text), "H%02d", five);
     } else if (have_costs) {
-        /* costs-only keyboard: no limits feed -> no C-- placeholder */
+        /* costs-only keyboard: no limits feed -> no H-- placeholder */
         text[0] = '\0';
     } else {
-        snprintf(text, sizeof(text), "C--");
+        snprintf(text, sizeof(text), "H--");
     }
     lv_label_set_text(label, text);
 #else
     int week = (int)atomic_get(&v_week);
     int o = (int)atomic_get(&v_o), s = (int)atomic_get(&v_s), f = (int)atomic_get(&v_f);
     if (o >= 0 || s >= 0 || f >= 0) {
-        /* no per-value '$' — 8px/char leaves only ~16 chars, and O$x.x S$x.x
-         * F$x.x overflows (F clipped). Decimal kept; these are Claude Code $. */
-        int O = o < 0 ? 0 : o, S = s < 0 ? 0 : s, F = f < 0 ? 0 : f;
-        snprintf(text, sizeof(text), "F%d.%d O%d.%d S%d.%d",
-                 F / 10, F % 10, O / 10, O % 10, S / 10, S % 10);
+        /* whole dollars (tenths rounded), total first, then F O S:
+         * "<total> F<f> O<o> S<s>". Integers make room for the total. */
+        int Od = o < 0 ? 0 : (o + 5) / 10;
+        int Sd = s < 0 ? 0 : (s + 5) / 10;
+        int Fd = f < 0 ? 0 : (f + 5) / 10;
+        snprintf(text, sizeof(text), "%d F%d O%d S%d", Od + Sd + Fd, Fd, Od, Sd);
     } else if (week >= 0) {
         snprintf(text, sizeof(text), "W%02d", week);
     } else {
