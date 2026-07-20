@@ -262,9 +262,11 @@ lv_obj_t *zmk_display_status_screen() {
     lv_obj_t *costs = zmk_costs_display_create(screen);
     if (costs != NULL) {
         lv_obj_set_style_text_font(costs, &lv_font_unscii_8, LV_PART_MAIN);
-        lv_obj_set_style_text_align(costs, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-        /* middle band, left-leaning (ETA owns the right of this band on battery) */
-        lv_obj_align(costs, LV_ALIGN_TOP_LEFT, 0, 16);
+        lv_obj_set_style_text_align(costs, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+        /* right-anchored, grows leftward: clears the left BT/USB glyph, and
+         * sits one row under the battery/ETA cluster. In costs mode the
+         * bottom-right limits line is empty, so this row is uncontested. */
+        lv_obj_align(costs, LV_ALIGN_TOP_RIGHT, 0, 16);
     }
 
     cu_label_ref = zmk_usage_display_create(screen);
