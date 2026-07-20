@@ -230,9 +230,9 @@ static void eta_update_cb(struct eta_state state) {
     uint32_t days = h10 / 240;
     uint32_t hours = (h10 % 240) / 10;
     if (days > 0) {
-        snprintf(eta_text, sizeof(eta_text), "~%ud%uh", days, hours);
+        snprintf(eta_text, sizeof(eta_text), "%ud%uh", days, hours);
     } else {
-        snprintf(eta_text, sizeof(eta_text), "~%u.%uh", h10 / 10, h10 % 10);
+        snprintf(eta_text, sizeof(eta_text), "%u.%uh", h10 / 10, h10 % 10);
     }
     render_batt();
 }
