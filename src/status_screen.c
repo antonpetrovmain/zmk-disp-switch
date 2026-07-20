@@ -156,13 +156,19 @@ static void render_batt(void) {
         return;
     }
     if (batt_pct_label != NULL) {
-        /* one line, right-anchored, grows leftward: "~2d15h 86" on battery,
+        /* one line, right-anchored, grows leftward: "2d15h 86" on battery,
          * just "86" while charging (ETA meaningless then) */
         if (!batt_usb && eta_text[0] != '\0') {
             lv_label_set_text_fmt(batt_pct_label, "%s %02u", eta_text, batt_soc);
         } else {
             lv_label_set_text_fmt(batt_pct_label, "%02u", batt_soc);
         }
+        /* low-battery alert: invert the reading when critically low on battery */
+        bool low = !batt_usb && batt_soc <= CONFIG_ZMK_DISP_SW_BATT_LOW_PCT;
+        lv_obj_set_style_bg_color(batt_pct_label, lv_color_white(), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(batt_pct_label, low ? LV_OPA_COVER : LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_text_color(batt_pct_label, low ? lv_color_black() : lv_color_white(),
+                                    LV_PART_MAIN);
     }
     const char *sym;
     if (batt_usb) {

@@ -19,6 +19,14 @@ config ZMK_DISP_SW_DRAIN_UA
     int "Assumed average drain in uA with screens dark (for the ETA widget)"
     default 1500
 
+config ZMK_DISP_SW_BATT_LOW_PCT
+    int "Battery percent at/below which the battery reading inverts (low-batt alert)"
+    default 15
+
+config ZMK_DISP_SW_LIMIT_WARN_PCT
+    int "5h/7d usage percent at/above which the limits line inverts (near-cap warning)"
+    default 85
+
 # Custom status screen (stock widgets + battery-ETA label). The `imply`s turn
 # the stock widgets on only where their role dependencies are met (layer/output
 # = central only, peripheral-status = peripheral only) — no Kconfig warnings.

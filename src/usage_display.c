@@ -47,6 +47,12 @@ static void update_cb(struct k_work *work) {
         snprintf(text, sizeof(text), "%%--");
     }
     lv_label_set_text(label, text);
+    /* near-cap warning: invert the limits line when 5h or 7d usage is high */
+    bool warn = five >= CONFIG_ZMK_DISP_SW_LIMIT_WARN_PCT ||
+                week >= CONFIG_ZMK_DISP_SW_LIMIT_WARN_PCT;
+    lv_obj_set_style_bg_color(label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(label, warn ? LV_OPA_COVER : LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, warn ? lv_color_black() : lv_color_white(), LV_PART_MAIN);
 #else
     int week = (int)atomic_get(&v_week);
     int o = (int)atomic_get(&v_o), s = (int)atomic_get(&v_s), f = (int)atomic_get(&v_f);
