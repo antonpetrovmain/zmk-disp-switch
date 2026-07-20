@@ -53,8 +53,10 @@ static void update_cb(struct k_work *work) {
     int week = (int)atomic_get(&v_week);
     int o = (int)atomic_get(&v_o), s = (int)atomic_get(&v_s), f = (int)atomic_get(&v_f);
     if (o >= 0 || s >= 0 || f >= 0) {
+        /* no per-value '$' — 8px/char leaves only ~16 chars, and O$x.x S$x.x
+         * F$x.x overflows (F clipped). Decimal kept; the left "cc" signals $. */
         int O = o < 0 ? 0 : o, S = s < 0 ? 0 : s, F = f < 0 ? 0 : f;
-        snprintf(text, sizeof(text), "O$%d.%d S$%d.%d F$%d.%d",
+        snprintf(text, sizeof(text), "O%d.%d S%d.%d F%d.%d",
                  O / 10, O % 10, S / 10, S % 10, F / 10, F % 10);
     } else if (week >= 0) {
         snprintf(text, sizeof(text), "W%02d", week);
