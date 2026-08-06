@@ -16,6 +16,9 @@
 #include <zmk/battery.h>
 #include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
+#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW)
+#include <zmk/rgb_underglow.h>
+#endif
 
 /* Own layer indicator: just the active layer NUMBER (the stock widget prefixes
  * LV_SYMBOL_KEYBOARD, which crowded the left OLED). Central only. */
@@ -146,6 +149,30 @@ static lv_obj_t *batt_pct_label;
 static lv_obj_t *batt_icon_label;
 static uint8_t batt_soc;
 static bool batt_usb;
+static bool screen_lit = true; /* until behavior_disp_switch reports otherwise */
+
+/* Live drain estimate in uA. The ETA is only as honest as this: a fixed
+ * constant cannot describe a keyboard whose draw swings ~100x between
+ * "screens dark, lights off" and "RGB at full". So charge each consumer only
+ * while it is actually running. */
+static uint32_t drain_ua(void) {
+    uint32_t ua = CONFIG_ZMK_DISP_SW_DRAIN_UA; /* MCU + radio floor */
+    if (screen_lit) {
+        ua += CONFIG_ZMK_DISP_SW_OLED_UA;
+    }
+#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW)
+    bool rgb_on = false;
+    if (zmk_rgb_underglow_get_state(&rgb_on) == 0 && rgb_on) {
+        /* calc_brt(0) reads the current brightness without changing it */
+        uint8_t brt = zmk_rgb_underglow_calc_brt(0).b;
+        if (brt > 100) {
+            brt = 100;
+        }
+        ua += ((uint32_t)CONFIG_ZMK_DISP_SW_RGB_FULL_UA / 100U) * brt;
+    }
+#endif
+    return ua == 0 ? 1 : ua; /* never divide by zero */
+}
 
 /* Own battery cluster: ONE glyph that swaps to the charge bolt while
  * powered (the stock widget APPENDS the bolt as a second glyph, which
@@ -158,15 +185,21 @@ static void render_batt(void) {
         /* "2d15h 86" — ETA + %. ETA is computed INLINE from batt_soc here (not
          * via a separate widget) so it can never fail to appear: batt_soc is
          * updated by batt_update_cb, which demonstrably runs, and this same
-         * call renders the ETA. Not gated on charge state — the bolt icon
-         * signals charging.
+         * call renders the ETA. On USB it is replaced by "CHG": the reading
+         * is the charge rail, not the cell, so an ETA there would be fiction.
          * Low-battery alert = a leading "!" (NO colour styling: an explicit
          * text_color made the whole label invisible on this mono OLED, where
          * the default text is the lit colour and white maps to OFF). */
         const char *w = batt_soc <= CONFIG_ZMK_DISP_SW_BATT_LOW_PCT ? "!" : "";
-        if (batt_soc > 0) {
-            uint32_t h10 = ((uint32_t)batt_soc * CONFIG_ZMK_DISP_SW_BATT_MAH * 100) /
-                           CONFIG_ZMK_DISP_SW_DRAIN_UA;
+        if (batt_usb) {
+            /* On USB the nice!nano's battery sense reads VDDH — the USB-fed
+             * rail, not the cell — so the percentage pins high and means
+             * nothing. Say so instead of printing a confident wrong number.
+             * (This is why the pack could read 60% right after a long charge:
+             * the high reading while cabled was the cable, not the battery.) */
+            lv_label_set_text(batt_pct_label, "CHG");
+        } else if (batt_soc > 0) {
+            uint32_t h10 = ((uint32_t)batt_soc * CONFIG_ZMK_DISP_SW_BATT_MAH * 100) / drain_ua();
             uint32_t days = h10 / 240, hours = (h10 % 240) / 10;
             if (days > 0) {
                 lv_label_set_text_fmt(batt_pct_label, "%s%ud%uh %02u", w, days, hours, batt_soc);
@@ -226,6 +259,13 @@ ZMK_SUBSCRIPTION(widget_batt_pct, zmk_battery_state_changed);
  * usage data without the cable, so it must stay visible here too. */
 void disp_sw_layout_refresh(bool usb) {
     batt_usb = usb;
+    render_batt();
+}
+
+/* Called by behavior_disp_switch whenever the panel is blanked/unblanked, so
+ * the ETA stops charging for an OLED that is currently dark. */
+void disp_sw_lit_changed(bool lit) {
+    screen_lit = lit;
     render_batt();
 }
 
