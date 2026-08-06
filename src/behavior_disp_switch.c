@@ -74,8 +74,11 @@ static bool usb_powered(void) {
 static void apply_blank_cb(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(apply_blank_work, apply_blank_cb);
 
-/* strong impl in status_screen.c; no-op when the custom screen is unused */
+/* strong impls in status_screen.c; no-ops when the custom screen is unused */
 __attribute__((weak)) void disp_sw_layout_refresh(bool usb) { ARG_UNUSED(usb); }
+/* Tells the battery-ETA model whether this half's panel is actually lit, so
+ * the OLED term is only charged when it is really being paid. */
+__attribute__((weak)) void disp_sw_lit_changed(bool lit) { ARG_UNUSED(lit); }
 
 static void apply_blank_cb(struct k_work *work) {
     if (!zmk_display_is_initialized()) {
@@ -83,8 +86,10 @@ static void apply_blank_cb(struct k_work *work) {
         k_work_reschedule_for_queue(zmk_display_work_q(), &apply_blank_work, K_MSEC(1000));
         return;
     }
+    bool lit = usb_powered() || !user_off || peek_active;
     disp_sw_layout_refresh(usb_powered());
-    if (usb_powered() || !user_off || peek_active) {
+    disp_sw_lit_changed(lit);
+    if (lit) {
         display_blanking_off(display);
     } else {
         display_blanking_on(display);
