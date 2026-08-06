@@ -16,8 +16,34 @@ config ZMK_DISP_SW_BATT_MAH
     default 110
 
 config ZMK_DISP_SW_DRAIN_UA
-    int "Assumed average drain in uA with screens dark (for the ETA widget)"
+    int "Baseline drain in uA: MCU + BLE only, screens dark, RGB off"
     default 1500
+    help
+      The floor the keyboard always draws. The ETA adds the OLED and RGB
+      terms below on top of this whenever those are actually active, so this
+      value must NOT include them.
+
+config ZMK_DISP_SW_OLED_UA
+    int "Extra drain in uA while this half's OLED is lit"
+    default 550
+    help
+      SSD1306 controller floor plus pixel drive at the configured contrast.
+      Only added while the panel is actually lit (USB, screens-on, or peek).
+
+config ZMK_DISP_SW_RGB_FULL_UA
+    int "Extra drain in uA with RGB underglow on at 100% brightness"
+    default 250000
+    help
+      Whole-chain draw for one half at full brightness; the ETA scales it by
+      the live brightness setting. Rough by nature — WS2812 current depends on
+      hue and effect — but the point is directional: with the lights on, the
+      ETA must collapse from days to hours.
+
+      NOT modelled here: the chain's QUIESCENT draw. The LEDs sit on the
+      ext-power rail, which stays on for the OLEDs, so they draw a little even
+      with RGB "off". If real runtime is much shorter than the ETA claims,
+      that is the first suspect — and &ext_power EP_OFF is the only cure
+      (it takes the OLEDs down with it).
 
 config ZMK_DISP_SW_BATT_LOW_PCT
     int "Battery percent at/below which the battery reading inverts (low-batt alert)"
