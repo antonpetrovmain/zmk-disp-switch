@@ -1,8 +1,4 @@
 name: claude-uart
 append:
-  # Keep every behaviour in the build, not just the ones the keymap references,
-  # so ZMK Studio can offer them when remapping. Upstream sets this in the
-  # studio-rpc-usb-uart snippet; folded in here since only one -S is possible.
-  DTS_EXTRA_CPPFLAGS: -DZMK_BEHAVIORS_KEEP_ALL
   EXTRA_DTC_OVERLAY_FILE: claude-uart.overlay
   EXTRA_CONF_FILE: claude-uart.conf
