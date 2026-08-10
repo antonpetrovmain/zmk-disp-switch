@@ -1,8 +1,25 @@
-/* USB CDC-ACM serial for the Claude-usage OLED widget (central half only —
- * apply this snippet to corne_left in build.yaml). The Mac-side daemon writes
- * "CU:<0-100>\n" lines to /dev/tty.usbmodem*. */
+/* Two USB CDC-ACM endpoints on the central half (apply to corne_left only).
+ *
+ * 1. cdc_acm_uart      — Claude-usage data. The Mac daemon writes
+ *                        "CU:<0-100>\n" style lines to /dev/tty.usbmodem*.
+ * 2. studio_rpc_uart   — ZMK Studio RPC, so zmk.studio works over USB.
+ *
+ * Declared in THIS order deliberately: the Claude port enumerates first, so
+ * the existing daemon's /dev/tty.usbmodem* glob keeps landing on it. With two
+ * CDC-ACM interfaces the Mac now exposes TWO tty devices — if the dashboard
+ * ever stops updating over serial, pin the daemon to the lower-numbered port
+ * (BLE delivery is unaffected either way).
+ *
+ * NOTE: this snippet replaces the upstream `studio-rpc-usb-uart` snippet,
+ * which cannot be used alongside this one — ZMK's build workflow passes a
+ * single `-S` argument, so the two would have to be merged regardless.
+ */
 &zephyr_udc0 {
     cdc_acm_uart: cdc_acm_uart {
+        compatible = "zephyr,cdc-acm-uart";
+    };
+
+    studio_rpc_uart: studio_rpc_uart {
         compatible = "zephyr,cdc-acm-uart";
     };
 };
@@ -10,5 +27,6 @@
 / {
     chosen {
         zmk,claude-uart = &cdc_acm_uart;
+        zmk,studio-rpc-uart = &studio_rpc_uart;
     };
 };
