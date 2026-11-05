@@ -4,7 +4,9 @@
  *   USB CDC serial lines: "CU:<0-100>" (5h %), "CW:<0-100>" (7d %),
  *                         "CR:HHMM" (5h reset time, local)
  *   BLE GATT char 4B5C0002-746F-6E79-0001-636C61756465: bytes
- *                         [five, week, hh, mm] (2-4 bytes, 0xFF = unknown)
+ *                         [five, week, hh, mm] (2-4 bytes, 0xFF = unknown;
+ *                         a 0xFF byte clears that field, an omitted one
+ *                         keeps its last value)
  *
  * Distribution is ONE path: invoke the disp_us global behavior with all
  * values packed in param1 — ZMK runs it locally (left screen) AND relays it
@@ -165,15 +167,18 @@ static ssize_t claude_usage_write(struct bt_conn *conn, const struct bt_gatt_att
     if (offset != 0 || len < 1 || len > 4) {
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
-    if (b[0] <= 100) {
+    if (b[0] <= 100 || b[0] == 0xFF) {
         atomic_set(&a_five, b[0]);
     }
-    if (len >= 2 && b[1] <= 100) {
+    if (len >= 2 && (b[1] <= 100 || b[1] == 0xFF)) {
         atomic_set(&a_week, b[1]);
     }
     if (len >= 4 && b[2] <= 23 && b[3] <= 59) {
         atomic_set(&a_hh, b[2]);
         atomic_set(&a_mm, b[3]);
+    } else if (len >= 4 && (b[2] == 0xFF || b[3] == 0xFF)) {
+        atomic_set(&a_hh, 0xFF);
+        atomic_set(&a_mm, 0xFF);
     }
     k_work_submit(&distribute_work);
     return len;

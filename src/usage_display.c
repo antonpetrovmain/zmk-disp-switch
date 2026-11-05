@@ -1,6 +1,9 @@
 /*
  * usage_display — per-half Claude usage rendering.
- * Central/left: personal-subscription limits "%<5h%> <HH:MM> W<7d%>".
+ * Central/left: personal-subscription limits "%<5h%> <HH:MM> W<7d%>"; any
+ *   unknown part shows as "--" ("%24 --:-- W65"). With no 5h window (the API
+ *   has sent only seven_day since 2026-11-04) it is "%-- W<7d%>": the reset
+ *   time belongs to the 5h window, so it is dropped with it.
  * Peripheral/right: work-account per-model spend "$<total> F<f> O<o> S<s>" in
  *   whole dollars (values carried as integer TENTHS, rounded for display; the
  *   leading bare number is the day's total). On a limits-only keyboard the
@@ -38,12 +41,16 @@ static void update_cb(struct k_work *work) {
      * text_color rendered white = OFF on this mono OLED and hid the label). */
     const char *w = (five >= CONFIG_ZMK_DISP_SW_LIMIT_WARN_PCT ||
                      week >= CONFIG_ZMK_DISP_SW_LIMIT_WARN_PCT) ? "!" : "";
-    if (five >= 0 && week >= 0 && hh >= 0) {
-        snprintf(text, sizeof(text), "%s%%%02d %02d:%02d W%02d", w, five, hh, mm, week);
-    } else if (five >= 0 && hh >= 0) {
-        snprintf(text, sizeof(text), "%s%%%02d %02d:%02d", w, five, hh, mm);
+    char wk[5] = "W--";
+    if (week >= 0) {
+        snprintf(wk, sizeof(wk), "W%02d", week);
+    }
+    if (five >= 0 && hh >= 0) {
+        snprintf(text, sizeof(text), "%s%%%02d %02d:%02d %s", w, five, hh, mm, wk);
     } else if (five >= 0) {
-        snprintf(text, sizeof(text), "%s%%%02d", w, five);
+        snprintf(text, sizeof(text), "%s%%%02d --:-- %s", w, five, wk);
+    } else if (week >= 0) {
+        snprintf(text, sizeof(text), "%s%%-- %s", w, wk);
     } else if (have_costs) {
         /* costs-only keyboard: no limits feed -> no %-- placeholder */
         text[0] = '\0';
@@ -71,16 +78,22 @@ static void update_cb(struct k_work *work) {
 }
 static K_WORK_DEFINE(update_work, update_cb);
 
+/* Every call carries all four values (the transport packs its full state), so
+ * -1 (= 0xFF on the wire) CLEARS a field rather than keeping a stale one.
+ * Other out-of-range values are ignored. */
 void zmk_usage_set(int five, int week, int hh, int mm) {
-    if (five >= 0 && five <= 100) {
+    if (five >= -1 && five <= 100) {
         atomic_set(&v_five, five);
     }
-    if (week >= 0 && week <= 100) {
+    if (week >= -1 && week <= 100) {
         atomic_set(&v_week, week);
     }
     if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
         atomic_set(&v_hh, hh);
         atomic_set(&v_mm, mm);
+    } else if (hh == -1 || mm == -1) {
+        atomic_set(&v_hh, -1);
+        atomic_set(&v_mm, -1);
     }
     k_work_submit_to_queue(zmk_display_work_q(), &update_work);
 }
